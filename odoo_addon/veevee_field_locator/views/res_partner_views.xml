@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_partner_geo_form_field_locator" model="ir.ui.view">
+        <field name="name">res.partner.geolocation.field.locator</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base_geolocalize.view_crm_partner_geo_form"/>
+        <field name="arch" type="xml">
+            <!-- Only administrators may recompute the location from the address. -->
+            <xpath expr="//div[@name='geo_localize_button']" position="attributes">
+                <attribute name="groups">base.group_system</attribute>
+            </xpath>
+            <xpath expr="//div[@name='geo_localize_button']" position="before">
+                <field name="vv_gps_captured" invisible="1"/>
+                <div invisible="not vv_gps_captured" class="text-success">
+                    <i class="fa fa-map-marker me-1" title="Captured by GPS"/>
+                    <span>Captured on site by GPS</span>
+                    <span invisible="not vv_gps_by"> by <field name="vv_gps_by" nolabel="1" class="oe_inline" readonly="1"/></span>
+                    <span invisible="not vv_gps_accuracy"> (accuracy <field name="vv_gps_accuracy" nolabel="1" class="oe_inline" readonly="1"/> m)</span>
+                </div>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -1,0 +1,201 @@
+# VeeVee Field Locator
+
+An Android app for VeeVee Infotech field staff. At a customer's site, the staff member opens the customer, taps **Set location**, and the GPS latitude/longitude is saved in Odoo 19 under **Contacts → Partner Assignment → Geolocation**.
+
+| Folder | What it is |
+|---|---|
+| `app/` | Flutter source of the Android app (`VeeVee Field Locator`, package `com.veeveeinfotech.fieldlocator`) |
+| `odoo_addon/veevee_field_locator/` | Odoo 19 module: hides the geolocation *Refresh* button, keeps GPS pins safe, restricts the shared login, offers app updates |
+| `.github/workflows/build-apk.yml` | Optional: build the APK on GitHub instead of your PC |
+
+Applies to: **Odoo 19** (Enterprise or Community: the geolocation fields come from the free `base_geolocalize` module) and **Android 8.0+**.
+
+---
+
+## 0. Test first with Odoo on your own PC
+
+1. Start your local Odoo 19 with the module folder in the addons path and listening on the network:
+   `./odoo-bin -c odoo.conf --addons-path=...,/path/to/odoo_addon --http-interface=0.0.0.0`
+   then install **VeeVee Field Locator** and create the field user (section 1).
+2. Find the PC's address: `hostname -I` (e.g. `192.168.1.10`). Allow the port: `sudo ufw allow 8069/tcp`.
+3. On the phone (same Wi-Fi), open `http://192.168.1.10:8069` in Chrome to be sure it loads.
+4. Build a **debug** APK (`flutter build apk --debug`) or run over USB (`flutter run`). Only debug builds allow `http://`.
+5. In the app: **Advanced settings → Odoo server URL** = `http://192.168.1.10:8069`, tap **Find** for the database.
+
+`localhost` does not work from the phone: on the phone, "localhost" is the phone itself.
+
+## 1. Odoo setup
+
+### 1.1 Install the module (on-premise or Odoo.sh)
+
+1. Copy `odoo_addon/veevee_field_locator` into your custom addons folder (on Odoo.sh: push it to your repository).
+2. Restart Odoo, turn on developer mode, then **Apps → Update Apps List**.
+3. Search **VeeVee Field Locator** and click **Activate**.
+
+The module is optional. The app works without it, but then:
+- the *Refresh* button stays visible (a click replaces the GPS pin with an address estimate),
+- editing a contact's address in Odoo resets its pin to 0 (standard Odoo behaviour),
+- the shared login is not restricted, and the update notice is off.
+
+On **Odoo Online** (`*.odoo.com`) custom modules cannot be installed. The app still saves locations there.
+
+### 1.2 Create the shared field login
+
+**Settings → Users & Companies → Users → New**
+
+| Field | Value |
+|---|---|
+| Name | Field Team |
+| Login | e.g. `field@veeveeinfotech.com` |
+| User type | Internal User |
+| Contacts | **Creation** |
+| Password | set one, e.g. `[PASSWORD]` (share it only with the field staff) |
+
+Then (developer mode) **Settings → Users & Companies → Groups → "Field Locator: location only" → Users → Add** the Field Team user.
+
+With this group the login **can** set locations and addresses, and create customers with basic details. It **cannot** change other details (name, GSTIN, email, salesperson…) or delete contacts. Odoo shows a clear message if someone tries.
+
+Do **not** switch on two-factor authentication for this login; the app cannot use it.
+
+### 1.3 What the app writes in Odoo
+
+| Odoo field (`res.partner`) | Value |
+|---|---|
+| `partner_latitude`, `partner_longitude` | GPS position of the pin, 7 decimals |
+| `date_localization` | date captured |
+| `vv_gps_captured`, `vv_gps_accuracy`, `vv_gps_by` | (module) "Captured on site by GPS by Ravi (accuracy 8 m)" |
+| `street`, `street2`, `city`, `zip`, `state_id`, `country_id` | only if the person changed the address on the location screen |
+| Chatter (log note) | "Location set on site with VeeVee Field Locator by Ravi on 05-11-2026, 10:42. Lat …, Long …. GPS accuracy 8 m. Remark: …" + site photo |
+
+New customers are created with: name, company/individual, phone, email, GSTIN, address and (for individuals) the company they work at.
+
+Note: Odoo 19 has no separate *Mobile* field on contacts, so the mobile number is saved in **Phone**. If a module adds a `mobile` field, the app uses it automatically.
+
+---
+
+## 2. Before building: set your server
+
+Edit `app/lib/config.dart`:
+
+```dart
+static const String defaultServerUrl = 'https://www.veeveeinfotech.com';
+static const String defaultDatabase = '';   // put your database name here
+```
+
+The database list is fetched automatically when the server allows it. If your server hides it (common), the name typed here is used, so staff only enter login and password. Both can still be changed under **Advanced settings** on the login screen.
+
+Other settings in the same file: GPS accuracy needed (20 m), "Save anyway" wait (45 s), sync interval.
+
+---
+
+## 3. Build the APK (Ubuntu)
+
+### 3.1 One-time tools
+
+1. **Flutter 3.47 or newer (stable)**: https://docs.flutter.dev/get-started/install/linux/android
+2. **Android SDK** via Android Studio (or command-line tools), with Android SDK Platform 36 and Build-Tools.
+3. **JDK 21** (`sudo apt install openjdk-21-jdk`).
+4. Run `flutter doctor --android-licenses` and accept, then `flutter doctor` until Android shows a tick.
+
+### 3.2 Create your signing key (once, keep it safe)
+
+All updates must be signed with the **same key**, otherwise phones refuse to install them over the old app.
+
+```bash
+keytool -genkey -v -keystore ~/veevee-upload.jks -keyalg RSA -keysize 2048 -validity 10000 -alias veevee
+```
+
+Create `app/android/key.properties` (never share or commit this file):
+
+```properties
+storePassword=[KEYSTORE PASSWORD]
+keyPassword=[KEY PASSWORD]
+keyAlias=veevee
+storeFile=/home/<you>/veevee-upload.jks
+```
+
+Back up the `.jks` file and passwords. If they are lost, staff must uninstall and reinstall the app.
+
+### 3.3 Build
+
+```bash
+cd app
+flutter pub get
+flutter build apk --release
+```
+
+The APK is at `app/build/app/outputs/flutter-apk/app-release.apk`.
+
+If Gradle complains about versions (for example because your Flutter is a different version), let Flutter regenerate the Android folder and keep our settings:
+
+```bash
+cd app
+mv android android_veevee
+flutter create --platforms=android --org com.veeveeinfotech --project-name veevee_field_locator .
+cp android_veevee/app/src/main/AndroidManifest.xml android/app/src/main/
+cp -r android_veevee/app/src/main/res/* android/app/src/main/res/
+# then copy the signing block and minSdk = 26 from android_veevee/app/build.gradle.kts
+```
+
+### 3.4 Install on phones
+
+Share the APK (WhatsApp, Drive, email). On the phone: open it → allow **Install unknown apps** for that app → Install. On first use, allow **Location: While using the app** (choose *Precise*).
+
+---
+
+## 4. Releasing an update
+
+1. Raise the version in **both** `app/pubspec.yaml` (`version: 1.1.0+2`) and `app/lib/config.dart` (`appVersion = '1.1.0'`).
+2. Build with the same signing key and upload the APK somewhere staff can download it (for example your website).
+3. In Odoo (developer mode) **Settings → Technical → System Parameters**:
+   - `veevee_field_locator.latest_version` = `1.1.0`
+   - `veevee_field_locator.apk_url` = the download link
+   - `veevee_field_locator.release_notes` = optional one line
+
+Phones show "New version available" after their next login or app start.
+
+---
+
+## 5. How the app works
+
+- **Login**: username/password over Odoo's standard web session (`/web/session/authenticate`). With *Keep me logged in*, the password is kept in Android's encrypted storage so the app can log in again by itself when the Odoo session expires.
+- **Your name**: asked once per phone. Everyone shares one Odoo login, so this name goes into each chatter note.
+- **Customers**: all contacts (companies and individuals, except your own staff users and invoice/delivery addresses) are downloaded to the phone, so search works offline. One search box matches name, mobile, GSTIN and city.
+- **Set location**: live GPS with accuracy. *Save* unlocks at 20 m or better, or "Save anyway" after 45 s. The map (free OpenStreetMap) has a pin in the centre; drag the map to put it on the entrance. Fake-GPS apps are blocked. The address is suggested from GPS (Android's free geocoder) and can be edited. Optional photo and remark.
+- **Existing location**: the app shows saved vs new point and distance, and asks before replacing.
+- **Duplicates**: a new customer with the same mobile or GSTIN as an existing one shows a warning with the match.
+- **Offline**: everything is saved on the phone first and sent to Odoo when the network is back (automatically every minute, on app open, or with *Sync now*). Entries Odoo refuses are shown in Settings with the reason, *Try again* and *Delete*.
+
+The free OpenStreetMap tiles are fine for a small team. For heavy use, OpenStreetMap asks you to use a paid tile provider (change `tileUrl` in `config.dart`).
+
+---
+
+## 6. Test checklist (first phone)
+
+- [ ] Login with the field login; database found or pre-filled
+- [ ] Enter your name; customer list loads; search by name, mobile, GSTIN, city
+- [ ] Open a customer → Set location outdoors → "Good GPS" appears → Save → Odoo contact shows Lat/Long in Partner Assignment, plus a chatter note
+- [ ] Set location again for the same customer → "Replace saved location?" appears
+- [ ] New customer with an existing mobile → duplicate warning
+- [ ] Wrong GSTIN → error; valid GSTIN → state shown
+- [ ] Airplane mode → save a location → "Saved on this phone" → turn network on → entry syncs
+- [ ] In Odoo as the field login: the *Refresh* button is not visible; editing email is refused
+- [ ] In Odoo as admin: edit the street of a GPS-pinned contact → Lat/Long stay
+
+---
+
+## 7. Troubleshooting
+
+| Message | Fix |
+|---|---|
+| "Wrong login or password." | Check login/password in Odoo Users |
+| "This Odoo user has two-factor authentication…" | Turn off 2FA for the field login |
+| "Database … was not found" | Correct the database name under Advanced settings |
+| "This address is not an Odoo server (404)" | Use the base address, e.g. `https://www.veeveeinfotech.com` |
+| "This login can only set customer locations…" | Expected for the shared login; change other details in Odoo |
+| Map is grey | No internet for map tiles; GPS saving still works |
+| "Fake GPS detected" | Developer options → Select mock location app → Nothing |
+
+---
+
+VeeVee Infotech · info@veeveeinfotech.com | +91 99657 82269
