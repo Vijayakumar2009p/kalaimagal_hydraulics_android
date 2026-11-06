@@ -1,6 +1,7 @@
 # Optional: build the APK on GitHub (no Flutter needed on your PC).
 # Push this folder to a private GitHub repository, then open
-# Actions > "Build APK" > Run workflow. The APK appears under the run's Artifacts.
+# Every push to main builds it (or Actions > "Build APK" > Run workflow). Two APKs
+# appear under the run's Artifacts: TEST (debug, allows local http:// Odoo) and RELEASE.
 #
 # For release signing (needed so updates install over the old app), add these
 # repository secrets: KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD.
@@ -9,6 +10,8 @@ name: Build APK
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 jobs:
   build:
@@ -47,9 +50,16 @@ jobs:
 
       - run: flutter pub get
       - run: flutter analyze
+      # Test APK: can also reach a local http:// Odoo (e.g. http://192.168.1.10:8069)
+      - run: flutter build apk --debug
+      # Release APK for staff: https only
       - run: flutter build apk --release
 
       - uses: actions/upload-artifact@v4
         with:
-          name: veevee-field-locator-apk
+          name: veevee-field-locator-TEST-apk
+          path: app/build/app/outputs/flutter-apk/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: veevee-field-locator-RELEASE-apk
           path: app/build/app/outputs/flutter-apk/app-release.apk
