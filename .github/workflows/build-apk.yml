@@ -1,5 +1,5 @@
 # Optional: build the APK on GitHub (no Flutter needed on your PC).
-# Push this folder to a private GitHub repository, then open
+# Push this folder to a private GitHub repository.
 # Every push to main builds it (or Actions > "Build APK" > Run workflow). Two APKs
 # appear under the run's Artifacts: TEST (debug, allows local http:// Odoo) and RELEASE.
 #
