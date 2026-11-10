@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app_scope.dart';
@@ -6,6 +7,7 @@ import '../config.dart';
 import '../models/customer.dart';
 import '../theme.dart';
 import '../utils/format.dart';
+import '../widgets/app_drawer.dart';
 import '../widgets/common.dart';
 import 'customer_screen.dart';
 import 'login_screen.dart';
@@ -23,6 +25,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _search = TextEditingController();
+  final _scaffold = GlobalKey<ScaffoldState>();
   _Filter _filter = _Filter.all;
   bool _updateShown = false;
 
@@ -54,154 +57,193 @@ class _HomeScreenState extends State<HomeScreen> {
     }).toList();
   }
 
+  /// Back button on the main screen: close the menu, or ask before leaving.
+  Future<void> _onBack() async {
+    final scaffold = _scaffold.currentState;
+    if (scaffold != null && scaffold.isDrawerOpen) {
+      scaffold.closeDrawer();
+      return;
+    }
+    final waiting = AppScope.read(context).waitingCount;
+    final exit = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Exit the app?'),
+        content: Text(
+          waiting == 0
+              ? 'Do you want to close VeeVee Field Locator?'
+              : '$waiting ${waiting == 1 ? 'entry is' : 'entries are'} waiting to sync. '
+                    'They are safe on this phone and will be sent next time you open the app.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('No')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Exit')),
+        ],
+      ),
+    );
+    if (exit == true) await SystemNavigator.pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final list = _visible(app.customers);
 
-    return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 16,
-        title: Row(
-          children: [
-            Image.asset('assets/images/logo_mark.png', width: 30, height: 27),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _onBack();
+      },
+      child: Scaffold(
+        key: _scaffold,
+        drawer: AppDrawer(
+          hostContext: context,
+          onShowAll: () => setState(() => _filter = _Filter.all),
+          onShowNoLocation: () => setState(() => _filter = _Filter.noLocation),
+          onShowWaiting: () => setState(() => _filter = _Filter.waiting),
+        ),
+        appBar: AppBar(
+          titleSpacing: 0,
+          leading: IconButton(
+            tooltip: 'Menu',
+            icon: const Icon(Icons.menu),
+            onPressed: () => _scaffold.currentState?.openDrawer(),
+          ),
+          title: Row(
+            children: [
+              Image.asset('assets/images/logo_mark.png', width: 30, height: 27),
+              const SizedBox(width: 8),
+              const Text(
+                'Field Locator',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: VV.ink),
+              ),
+            ],
+          ),
+          actions: [
+            _SyncButton(
+              count: app.waitingCount,
+              busy: app.syncing || app.refreshing,
+              onTap: () async {
+                await app.refreshAll();
+                if (!context.mounted) return;
+                if (!app.online) {
+                  showMessage(context, 'Still offline. Entries are safe on this phone.');
+                } else if (app.refreshError != null) {
+                  showMessage(context, app.refreshError!, error: true);
+                }
+              },
+            ),
             const SizedBox(width: 8),
-            const Text(
-              'Field Locator',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: VV.ink),
+          ],
+        ),
+        body: Column(
+          children: [
+            if (app.needsLogin)
+              InfoStrip(
+                text: 'Your Odoo session ended. Tap to log in again.',
+                icon: Icons.lock_outline,
+                tone: Tone.danger,
+                onTap: () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const LoginScreen(relogin: true))),
+              )
+            else if (!app.online)
+              InfoStrip(
+                text: app.waitingCount == 0
+                    ? "You're offline. You can still save locations."
+                    : "You're offline. ${app.waitingCount} "
+                          "${app.waitingCount == 1 ? 'entry' : 'entries'} will sync automatically.",
+                icon: Icons.wifi_off,
+              )
+            else if (app.blockedCount > 0)
+              InfoStrip(
+                text:
+                    '${app.blockedCount} ${app.blockedCount == 1 ? 'entry was' : 'entries were'} '
+                    'refused by Odoo. Tap to check.',
+                icon: Icons.error_outline,
+                tone: Tone.danger,
+                onTap: () =>
+                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: _search,
+                    onChanged: (_) => setState(() {}),
+                    textInputAction: TextInputAction.search,
+                    decoration: InputDecoration(
+                      hintText: 'Name, mobile, GSTIN or city',
+                      filled: true,
+                      fillColor: VV.surfaceRaised,
+                      prefixIcon: const Icon(Icons.search, color: VV.inkMuted),
+                      suffixIcon: _search.text.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: 'Clear search',
+                              icon: const Icon(Icons.close),
+                              onPressed: () => setState(_search.clear),
+                            ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(VV.radiusMd),
+                        borderSide: const BorderSide(color: VV.line),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(VV.radiusMd),
+                        borderSide: const BorderSide(color: VV.line),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _chip('All', _Filter.all),
+                        const SizedBox(width: 8),
+                        _chip('No location', _Filter.noLocation),
+                        const SizedBox(width: 8),
+                        _chip('Waiting to sync', _Filter.waiting),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '${formatIndian(app.customers.length)} customers · '
+                    '${formatIndian(app.withoutLocationCount)} without location'
+                    '${app.lastRefresh != null ? ' · updated ${formatTime(app.lastRefresh!)}' : ''}',
+                    style: const TextStyle(fontSize: 12, color: VV.inkMuted, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(),
+            Expanded(
+              child: RefreshIndicator(
+                color: VV.blue,
+                onRefresh: app.refreshAll,
+                child: list.isEmpty
+                    ? _empty(app.customers.isEmpty, app.refreshing)
+                    : ListView.separated(
+                        padding: const EdgeInsets.only(bottom: 96),
+                        itemCount: list.length,
+                        separatorBuilder: (_, _) => const Divider(),
+                        itemBuilder: (context, i) => _CustomerRow(customer: list[i]),
+                      ),
+              ),
             ),
           ],
         ),
-        actions: [
-          _SyncButton(
-            count: app.waitingCount,
-            busy: app.syncing || app.refreshing,
-            onTap: () async {
-              await app.refreshAll();
-              if (!context.mounted) return;
-              if (!app.online) {
-                showMessage(context, 'Still offline. Entries are safe on this phone.');
-              } else if (app.refreshError != null) {
-                showMessage(context, app.refreshError!, error: true);
-              }
-            },
-          ),
-          IconButton(
-            tooltip: 'Settings',
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () =>
-                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (app.needsLogin)
-            InfoStrip(
-              text: 'Your Odoo session ended. Tap to log in again.',
-              icon: Icons.lock_outline,
-              tone: Tone.danger,
-              onTap: () => Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const LoginScreen(relogin: true))),
-            )
-          else if (!app.online)
-            InfoStrip(
-              text: app.waitingCount == 0
-                  ? "You're offline. You can still save locations."
-                  : "You're offline. ${app.waitingCount} "
-                        "${app.waitingCount == 1 ? 'entry' : 'entries'} will sync automatically.",
-              icon: Icons.wifi_off,
-            )
-          else if (app.blockedCount > 0)
-            InfoStrip(
-              text:
-                  '${app.blockedCount} ${app.blockedCount == 1 ? 'entry was' : 'entries were'} '
-                  'refused by Odoo. Tap to check.',
-              icon: Icons.error_outline,
-              tone: Tone.danger,
-              onTap: () =>
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
-            ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: _search,
-                  onChanged: (_) => setState(() {}),
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    hintText: 'Name, mobile, GSTIN or city',
-                    filled: true,
-                    fillColor: VV.surfaceRaised,
-                    prefixIcon: const Icon(Icons.search, color: VV.inkMuted),
-                    suffixIcon: _search.text.isEmpty
-                        ? null
-                        : IconButton(
-                            tooltip: 'Clear search',
-                            icon: const Icon(Icons.close),
-                            onPressed: () => setState(_search.clear),
-                          ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(VV.radiusMd),
-                      borderSide: const BorderSide(color: VV.line),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(VV.radiusMd),
-                      borderSide: const BorderSide(color: VV.line),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _chip('All', _Filter.all),
-                      const SizedBox(width: 8),
-                      _chip('No location', _Filter.noLocation),
-                      const SizedBox(width: 8),
-                      _chip('Waiting to sync', _Filter.waiting),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  '${formatIndian(app.customers.length)} customers · '
-                  '${formatIndian(app.withoutLocationCount)} without location'
-                  '${app.lastRefresh != null ? ' · updated ${formatTime(app.lastRefresh!)}' : ''}',
-                  style: const TextStyle(fontSize: 12, color: VV.inkMuted, fontWeight: FontWeight.w500),
-                ),
-              ],
-            ),
-          ),
-          const Divider(),
-          Expanded(
-            child: RefreshIndicator(
-              color: VV.blue,
-              onRefresh: app.refreshAll,
-              child: list.isEmpty
-                  ? _empty(app.customers.isEmpty, app.refreshing)
-                  : ListView.separated(
-                      padding: const EdgeInsets.only(bottom: 96),
-                      itemCount: list.length,
-                      separatorBuilder: (_, _) => const Divider(),
-                      itemBuilder: (context, i) => _CustomerRow(customer: list[i]),
-                    ),
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: VV.blue,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('New customer', style: TextStyle(fontWeight: FontWeight.w600)),
-        onPressed: () =>
-            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NewCustomerScreen())),
+        floatingActionButton: FloatingActionButton.extended(
+          backgroundColor: VV.blue,
+          foregroundColor: Colors.white,
+          icon: const Icon(Icons.add),
+          label: const Text('New customer', style: TextStyle(fontWeight: FontWeight.w600)),
+          onPressed: () =>
+              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NewCustomerScreen())),
+        ),
       ),
     );
   }

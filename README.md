@@ -63,9 +63,8 @@ Do **not** switch on two-factor authentication for this login; the app cannot us
 |---|---|
 | `partner_latitude`, `partner_longitude` | GPS position of the pin, 7 decimals |
 | `date_localization` | date captured |
-| `vv_gps_captured`, `vv_gps_accuracy`, `vv_gps_by` | (module) "Captured on site by GPS by Ravi (accuracy 8 m)" |
-| `street`, `street2`, `city`, `zip`, `state_id`, `country_id` | only if the person changed the address on the location screen |
-| Chatter (log note) | "Location set on site with VeeVee Field Locator by Ravi on 05-11-2026, 10:42. Lat …, Long …. GPS accuracy 8 m. Remark: …" + site photo |
+| `vv_gps_captured`, `vv_gps_accuracy`, `vv_gps_by` | (module, stored but not shown) GPS capture, accuracy, person |
+| Chatter (log note) | "Location set on site with VeeVee Field Locator by Ravi on 05-11-2026, 10:42. Lat …, Long …. GPS accuracy 8 m." |
 
 New customers are created with: name, company/individual, phone, email, GSTIN, address and (for individuals) the company they work at.
 
@@ -161,12 +160,10 @@ Phones show "New version available" after their next login or app start.
 - **Login**: username/password over Odoo's standard web session (`/web/session/authenticate`). With *Keep me logged in*, the password is kept in Android's encrypted storage so the app can log in again by itself when the Odoo session expires.
 - **Your name**: asked once per phone. Everyone shares one Odoo login, so this name goes into each chatter note.
 - **Customers**: all contacts (companies and individuals, except your own staff users and invoice/delivery addresses) are downloaded to the phone, so search works offline. One search box matches name, mobile, GSTIN and city.
-- **Set location**: live GPS with accuracy. *Save* unlocks at 20 m or better, or "Save anyway" after 45 s. The map (free OpenStreetMap) has a pin in the centre; drag the map to put it on the entrance. Fake-GPS apps are blocked. The address is suggested from GPS (Android's free geocoder) and can be edited. Optional photo and remark.
+- **Set location**: after location permission is allowed, the app takes the phone's current location by itself (it waits up to 15 seconds for the most accurate reading, and stops early at 20 m or better), shows latitude, longitude and accuracy, and the person taps **Save location**. *Retake* takes a fresh reading. Fake-GPS apps are blocked. The customer's address is not changed.
 - **Existing location**: the app shows saved vs new point and distance, and asks before replacing.
 - **Duplicates**: a new customer with the same mobile or GSTIN as an existing one shows a warning with the match.
 - **Offline**: everything is saved on the phone first and sent to Odoo when the network is back (automatically every minute, on app open, or with *Sync now*). Entries Odoo refuses are shown in Settings with the reason, *Try again* and *Delete*.
-
-The free OpenStreetMap tiles are fine for a small team. For heavy use, OpenStreetMap asks you to use a paid tile provider (change `tileUrl` in `config.dart`).
 
 ---
 
@@ -174,7 +171,7 @@ The free OpenStreetMap tiles are fine for a small team. For heavy use, OpenStree
 
 - [ ] Login with the field login; database found or pre-filled
 - [ ] Enter your name; customer list loads; search by name, mobile, GSTIN, city
-- [ ] Open a customer → Set location outdoors → "Good GPS" appears → Save → Odoo contact shows Lat/Long in Partner Assignment, plus a chatter note
+- [ ] Open a customer → Set location → location is taken by itself → Save location → Odoo contact shows Lat/Long in Partner Assignment, plus a chatter note
 - [ ] Set location again for the same customer → "Replace saved location?" appears
 - [ ] New customer with an existing mobile → duplicate warning
 - [ ] Wrong GSTIN → error; valid GSTIN → state shown
@@ -193,7 +190,6 @@ The free OpenStreetMap tiles are fine for a small team. For heavy use, OpenStree
 | "Database … was not found" | Correct the database name under Advanced settings |
 | "This address is not an Odoo server (404)" | Use the base address, e.g. `https://www.veeveeinfotech.com` |
 | "This login can only set customer locations…" | Expected for the shared login; change other details in Odoo |
-| Map is grey | No internet for map tiles; GPS saving still works |
 | "Fake GPS detected" | Developer options → Select mock location app → Nothing |
 
 ---

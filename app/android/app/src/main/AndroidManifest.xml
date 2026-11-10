@@ -1,13 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Talk to the Odoo server and load map tiles -->
+    <!-- Talk to the Odoo server -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Precise GPS position of the customer site (only while the app is open) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <uses-feature android:name="android.hardware.location.gps" android:required="false"/>
-    <uses-feature android:name="android.hardware.camera" android:required="false"/>
 
     <application
         android:label="VeeVee Field Locator"
@@ -39,7 +38,7 @@
             android:value="2" />
     </application>
 
-    <!-- Apps this app opens: browser (update download, maps), phone dialer, camera -->
+    <!-- Apps this app opens: browser (update download, maps) and phone dialer -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
@@ -52,9 +51,6 @@
         <intent>
             <action android:name="android.intent.action.DIAL"/>
             <data android:scheme="tel"/>
-        </intent>
-        <intent>
-            <action android:name="android.media.action.IMAGE_CAPTURE"/>
         </intent>
     </queries>
 </manifest>

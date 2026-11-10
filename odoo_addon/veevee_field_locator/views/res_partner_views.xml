@@ -9,15 +9,6 @@
             <xpath expr="//div[@name='geo_localize_button']" position="attributes">
                 <attribute name="groups">base.group_system</attribute>
             </xpath>
-            <xpath expr="//div[@name='geo_localize_button']" position="before">
-                <field name="vv_gps_captured" invisible="1"/>
-                <div invisible="not vv_gps_captured" class="text-success">
-                    <i class="fa fa-map-marker me-1" title="Captured by GPS"/>
-                    <span>Captured on site by GPS</span>
-                    <span invisible="not vv_gps_by"> by <field name="vv_gps_by" nolabel="1" class="oe_inline" readonly="1"/></span>
-                    <span invisible="not vv_gps_accuracy"> (accuracy <field name="vv_gps_accuracy" nolabel="1" class="oe_inline" readonly="1"/> m)</span>
-                </div>
-            </xpath>
         </field>
     </record>
 </odoo>

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 enum LocationProblem { serviceOff, denied, deniedForever, approximate }
@@ -18,27 +17,6 @@ class LocationProblemException implements Exception {
       'The app has only approximate location, which can be off by a kilometre. '
           'In Settings › Apps › VeeVee Field Locator › Permissions › Location, turn on "Use precise location".',
   };
-}
-
-/// Address suggested from GPS (Android's free on-device geocoder).
-class GpsAddress {
-  GpsAddress({
-    this.street = '',
-    this.street2 = '',
-    this.city = '',
-    this.zip = '',
-    this.state = '',
-    this.countryCode = '',
-  });
-
-  final String street;
-  final String street2;
-  final String city;
-  final String zip;
-  final String state;
-  final String countryCode;
-
-  bool get isEmpty => street.isEmpty && city.isEmpty && zip.isEmpty;
 }
 
 class LocationService {
@@ -81,36 +59,5 @@ class LocationService {
         intervalDuration: const Duration(seconds: 1),
       ),
     );
-  }
-
-  static Future<GpsAddress?> addressFor(double lat, double lng) async {
-    try {
-      final places = await Geocoding()
-          .placemarkFromCoordinates(lat, lng)
-          .timeout(const Duration(seconds: 12));
-      if (places.isEmpty) return null;
-      final p = places.first;
-      String s(String? v) => (v ?? '').trim();
-
-      final number = s(p.subThoroughfare);
-      final road = s(p.thoroughfare);
-      var street = [number, road].where((e) => e.isNotEmpty).join(', ');
-      if (street.isEmpty) street = s(p.street);
-      // Android often returns a Plus Code (e.g. "X7QF+2M") as street; skip it.
-      if (RegExp(r'^[23456789CFGHJMPQRVWX]{4,}\+').hasMatch(street)) street = '';
-
-      final area = s(p.subLocality);
-      final city = s(p.locality).isNotEmpty ? s(p.locality) : s(p.subAdministrativeArea);
-      return GpsAddress(
-        street: street,
-        street2: area == city ? '' : area,
-        city: city,
-        zip: s(p.postalCode),
-        state: s(p.administrativeArea),
-        countryCode: s(p.isoCountryCode).toUpperCase(),
-      );
-    } catch (_) {
-      return null; // offline or no geocoder on this phone
-    }
   }
 }

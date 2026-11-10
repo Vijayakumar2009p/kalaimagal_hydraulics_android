@@ -128,49 +128,55 @@ class SettingsScreen extends StatelessWidget {
     clipBehavior: Clip.antiAlias,
     child: child,
   );
+}
 
-  Future<void> _checkUpdate(BuildContext context, AppState app) async {
-    if (!app.hasAddon) {
-      showMessage(context, 'Update check needs the VeeVee Field Locator module in Odoo.');
-      return;
-    }
-    final info = await app.checkForUpdate();
-    if (!context.mounted) return;
-    if (info == null) {
-      showMessage(context, 'Could not check for updates. Are you online?', error: true);
-    } else if (info.isNewer) {
-      await showUpdateDialog(context);
-    } else {
-      showMessage(context, "You're on the latest version (${AppConfig.appVersion}).");
-    }
+/// "Check for updates" (Settings and the side menu).
+Future<void> checkForUpdatesInteractive(BuildContext context, AppState app) => _checkUpdate(context, app);
+
+/// "Log out" with confirmation (Settings and the side menu).
+Future<void> confirmLogOut(BuildContext context, AppState app) => _logOut(context, app);
+
+Future<void> _checkUpdate(BuildContext context, AppState app) async {
+  if (!app.hasAddon) {
+    showMessage(context, 'Update check needs the VeeVee Field Locator module in Odoo.');
+    return;
   }
+  final info = await app.checkForUpdate();
+  if (!context.mounted) return;
+  if (info == null) {
+    showMessage(context, 'Could not check for updates. Are you online?', error: true);
+  } else if (info.isNewer) {
+    await showUpdateDialog(context);
+  } else {
+    showMessage(context, "You're on the latest version (${AppConfig.appVersion}).");
+  }
+}
 
-  Future<void> _logOut(BuildContext context, AppState app) async {
-    final waiting = app.queue.length;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Log out?'),
-        content: Text(
-          waiting == 0
-              ? 'You will need the login and password to use the app again.'
-              : '$waiting ${waiting == 1 ? 'entry has' : 'entries have'} not reached Odoo yet '
-                    'and will be lost. Sync first if you can.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: VV.danger),
-            onPressed: () => Navigator.pop(c, true),
-            child: Text(waiting == 0 ? 'Log out' : 'Log out anyway'),
-          ),
-        ],
+Future<void> _logOut(BuildContext context, AppState app) async {
+  final waiting = app.queue.length;
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (c) => AlertDialog(
+      title: const Text('Log out?'),
+      content: Text(
+        waiting == 0
+            ? 'You will need the login and password to use the app again.'
+            : '$waiting ${waiting == 1 ? 'entry has' : 'entries have'} not reached Odoo yet '
+                  'and will be lost. Sync first if you can.',
       ),
-    );
-    if (ok != true || !context.mounted) return;
-    Navigator.of(context).popUntil((r) => r.isFirst);
-    await app.logOut();
-  }
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+        TextButton(
+          style: TextButton.styleFrom(foregroundColor: VV.danger),
+          onPressed: () => Navigator.pop(c, true),
+          child: Text(waiting == 0 ? 'Log out' : 'Log out anyway'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+  Navigator.of(context).popUntil((r) => r.isFirst);
+  await app.logOut();
 }
 
 class _PendingRow extends StatelessWidget {
