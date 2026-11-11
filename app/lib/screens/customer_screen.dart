@@ -75,23 +75,22 @@ class CustomerScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                   ],
-                  InfoTable([
-                    ('Mobile', c.phone),
-                    ('GSTIN', c.vat),
-                    ('Email', c.email),
-                    ('Address', c.addressLine),
-                  ], stacked: true),
-                  if (c.phone.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
+                  InfoTable(
+                    [('Mobile', c.phone), ('GSTIN', c.vat), ('Email', c.email), ('Address', c.addressLine)],
+                    stacked: true,
+                    actions: {
+                      'Mobile': FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: VV.success,
+                          minimumSize: const Size(96, 44),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                        ),
                         onPressed: () => launchUrl(Uri(scheme: 'tel', path: c.phone.replaceAll(' ', ''))),
-                        icon: const Icon(Icons.call_outlined, size: 18),
-                        label: const Text('Call customer'),
+                        icon: const Icon(Icons.call, size: 20),
+                        label: const Text('Call'),
                       ),
-                    ),
-                  ],
+                    },
+                  ),
                   const SizedBox(height: 16),
                   if (c.hasLocation) _LocationCard(c, waiting: waitingLocation) else const _NoLocationCard(),
                 ],

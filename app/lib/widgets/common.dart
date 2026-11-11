@@ -224,12 +224,15 @@ class SectionLabel extends StatelessWidget {
 
 /// Bordered list of label/value rows.
 class InfoTable extends StatelessWidget {
-  const InfoTable(this.rows, {super.key, this.stacked = false});
+  const InfoTable(this.rows, {super.key, this.stacked = false, this.actions = const {}});
 
   final List<(String, String)> rows;
 
   /// Label above value (true) or label left, value right (false).
   final bool stacked;
+
+  /// A button shown at the right of a row, by row label (e.g. Call beside Mobile).
+  final Map<String, Widget> actions;
 
   @override
   Widget build(BuildContext context) {
@@ -250,19 +253,32 @@ class InfoTable extends StatelessWidget {
                 border: i == visible.length - 1 ? null : const Border(bottom: BorderSide(color: VV.line)),
               ),
               child: stacked
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  ? Row(
                       children: [
-                        Text(
-                          visible[i].$1,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: VV.inkMuted,
-                            fontWeight: FontWeight.w500,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                visible[i].$1,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: VV.inkMuted,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              SelectableText(
+                                visible[i].$2,
+                                style: const TextStyle(fontSize: 16, height: 1.4),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        SelectableText(visible[i].$2, style: const TextStyle(fontSize: 16, height: 1.4)),
+                        if (actions[visible[i].$1] != null) ...[
+                          const SizedBox(width: 12),
+                          actions[visible[i].$1]!,
+                        ],
                       ],
                     )
                   : Row(

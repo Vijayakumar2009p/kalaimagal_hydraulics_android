@@ -37,10 +37,24 @@ class LocationSavedScreen extends StatelessWidget {
       title = 'Saved on this phone';
       message = 'Sending to Odoo…';
     }
+    void goHome() => Navigator.of(context).popUntil((r) => r.isFirst);
     return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        titleSpacing: 4,
+        title: TextButton.icon(
+          onPressed: goHome,
+          style: TextButton.styleFrom(
+            foregroundColor: VV.ink,
+            textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+          ),
+          icon: const Icon(Icons.home_outlined, size: 26),
+          label: const Text('Home'),
+        ),
+      ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 56, 16, 24),
+          padding: const EdgeInsets.fromLTRB(16, 32, 16, 24),
           children: [
             Center(
               child: synced

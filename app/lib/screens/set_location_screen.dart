@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../app_scope.dart';
@@ -137,6 +138,7 @@ class _SetLocationScreenState extends State<SetLocationScreen> {
     );
     try {
       final ref = await app.saveLocation(input);
+      HapticFeedback.mediumImpact(); // a short buzz: "done"
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
@@ -289,27 +291,33 @@ class _SetLocationScreenState extends State<SetLocationScreen> {
       children: [
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
             children: [
-              Center(
-                child: BigIcon(
-                  _good ? Icons.check : Icons.my_location,
-                  tone: _good ? Tone.success : Tone.gold,
-                ),
-              ),
+              const _Steps(),
+              const SizedBox(height: 24),
+              Center(child: BigIcon(Icons.location_on, tone: _good ? Tone.blue : Tone.gold)),
               const SizedBox(height: 16),
               const Text(
-                'Current location captured',
+                'Location found',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
               ),
-              const SizedBox(height: 6),
-              const Text(
-                'Tap Save location to store it in Odoo.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 15, color: VV.inkMuted),
+              const SizedBox(height: 8),
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: VV.goldSoft,
+                    borderRadius: BorderRadius.circular(VV.radiusMd),
+                  ),
+                  child: const Text(
+                    'Not saved yet. Tap the blue button below.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: VV.goldText),
+                  ),
+                ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               InfoTable([
                 ('Latitude', formatCoord(fix.latitude)),
                 ('Longitude', formatCoord(fix.longitude)),
@@ -320,45 +328,136 @@ class _SetLocationScreenState extends State<SetLocationScreen> {
                 const SizedBox(height: 16),
                 Callout(
                   'GPS is weak here (${fix.accuracy.round()} m). For a more exact location, step outside '
-                  'or near a window and tap Retake.',
+                  'or near a window and tap "Find again".',
                   tone: Tone.gold,
                   icon: Icons.info_outline,
                 ),
               ],
+              const SizedBox(height: 16),
+              const Icon(Icons.keyboard_double_arrow_down, size: 36, color: VV.blue),
             ],
           ),
         ),
         Container(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           decoration: const BoxDecoration(
+            color: VV.blueSoft,
             border: Border(top: BorderSide(color: VV.line)),
           ),
-          child: Row(
+          child: Column(
             children: [
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(minimumSize: const Size(64, 52)),
-                onPressed: _saving ? null : _capture,
-                icon: const Icon(Icons.refresh, size: 20),
-                label: const Text('Retake'),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  style: FilledButton.styleFrom(minimumSize: const Size(64, 52)),
-                  onPressed: _saving ? null : _save,
-                  child: _saving
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-                        )
-                      : const Text('Save location', style: TextStyle(fontSize: 16)),
+              _Pulse(
+                active: !_saving,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(64, 64),
+                      textStyle: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
+                      elevation: 3,
+                    ),
+                    onPressed: _saving ? null : _save,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                          )
+                        : const Icon(Icons.save_alt, size: 26),
+                    label: Text(_saving ? 'Saving…' : 'Save location'),
+                  ),
                 ),
+              ),
+              const SizedBox(height: 4),
+              TextButton.icon(
+                onPressed: _saving ? null : _capture,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Find again'),
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// "1 Find location ✓  ——  2 Save" so the person knows one step is left.
+class _Steps extends StatelessWidget {
+  const _Steps();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget step(String n, String label, {required bool done}) => Column(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: done ? VV.success : VV.blue, shape: BoxShape.circle),
+          child: done
+              ? const Icon(Icons.check, color: Colors.white, size: 20)
+              : Text(
+                  n,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+                ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: done ? FontWeight.w500 : FontWeight.w700,
+            color: done ? VV.inkMuted : VV.blue,
+          ),
+        ),
+      ],
+    );
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        step('1', 'Find location', done: true),
+        Container(
+          width: 64,
+          height: 2,
+          margin: const EdgeInsets.only(top: 17, left: 8, right: 8),
+          color: VV.line,
+        ),
+        step('2', 'Save', done: false),
+      ],
+    );
+  }
+}
+
+/// Gently grows and shrinks its child to draw the eye (the Save button).
+class _Pulse extends StatefulWidget {
+  const _Pulse({required this.child, this.active = true});
+  final Widget child;
+  final bool active;
+
+  @override
+  State<_Pulse> createState() => _PulseState();
+}
+
+class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.active) return widget.child;
+    return ScaleTransition(
+      scale: Tween<double>(begin: 1, end: 1.04).animate(CurvedAnimation(parent: _c, curve: Curves.easeInOut)),
+      child: widget.child,
     );
   }
 }
