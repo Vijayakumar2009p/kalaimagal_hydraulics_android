@@ -14,10 +14,10 @@ import '../utils/format.dart';
 import '../widgets/common.dart';
 import 'location_saved_screen.dart';
 
-/// Takes the phone's current location by itself, then offers "Save location".
-///
-/// It listens to GPS for up to [_maxWait] and keeps the most accurate reading.
-/// It stops early as soon as the reading is good (20 m or better).
+/// Takes the phone's current location by itself and offers "Save location"
+/// as soon as the first reading arrives. GPS keeps running in the background and
+/// replaces the reading whenever a more accurate one comes in, until the person
+/// taps Save (or the reading is very accurate, or [_keepImproving] has passed).
 class SetLocationScreen extends StatefulWidget {
   const SetLocationScreen({super.key, required this.customer});
   final Customer customer;
@@ -27,17 +27,23 @@ class SetLocationScreen extends StatefulWidget {
 }
 
 class _SetLocationScreenState extends State<SetLocationScreen> {
-  static const _maxWait = Duration(seconds: 15);
+  /// Stop improving after this long (saves battery).
+  static const _keepImproving = Duration(seconds: 60);
+
+  /// Stop improving once the reading is this good.
+  static const _veryGoodMeters = 8.0;
 
   StreamSubscription<Position>? _sub;
   Timer? _timer;
   Position? _best;
   DateTime? _capturedAt;
   bool _capturing = true;
-  bool _timeUp = false;
   bool _mocked = false;
   bool _saving = false;
   LocationProblemException? _problem;
+
+  /// GPS is still running and may improve the reading.
+  bool get _improving => _sub != null;
 
   @override
   void initState() {
@@ -66,7 +72,6 @@ class _SetLocationScreenState extends State<SetLocationScreen> {
       _best = null;
       _capturedAt = null;
       _capturing = true;
-      _timeUp = false;
     });
     try {
       await LocationService.ensureReady(); // asks for permission when needed
@@ -75,15 +80,18 @@ class _SetLocationScreenState extends State<SetLocationScreen> {
       return;
     }
     if (!mounted) return;
-    _timer = Timer(_maxWait, () {
-      _timeUp = true;
-      if (_best != null) _finish();
+    _timer = Timer(_keepImproving, () {
+      if (mounted) setState(_stop);
     });
     _sub = LocationService.positions().listen(
       _onPosition,
       onError: (Object e) {
         if (!mounted) return;
         _stop();
+        if (_best != null) {
+          setState(() {}); // keep the reading we already have
+          return;
+        }
         setState(
           () => _problem = LocationProblemException(
             e is PermissionDeniedException ? LocationProblem.denied : LocationProblem.serviceOff,
@@ -100,18 +108,14 @@ class _SetLocationScreenState extends State<SetLocationScreen> {
       setState(() => _mocked = true);
       return;
     }
-    if (_best == null || p.accuracy < _best!.accuracy) setState(() => _best = p);
-    if (p.accuracy <= AppConfig.goodAccuracyMeters || _timeUp) _finish();
-  }
-
-  void _finish() {
-    _stop();
-    if (mounted) {
+    if (_best == null || p.accuracy < _best!.accuracy) {
       setState(() {
-        _capturing = false;
+        _best = p;
         _capturedAt = DateTime.now();
+        _capturing = false; // first reading: show it with the Save button
       });
     }
+    if (p.accuracy <= _veryGoodMeters) setState(_stop);
   }
 
   bool get _good => _best != null && _best!.accuracy <= AppConfig.goodAccuracyMeters;
@@ -119,6 +123,7 @@ class _SetLocationScreenState extends State<SetLocationScreen> {
   Future<void> _save() async {
     final fix = _best;
     if (fix == null) return;
+    setState(_stop); // freeze the reading being saved
     final app = AppScope.read(context);
     final customer = app.resolve(widget.customer);
 
@@ -324,7 +329,25 @@ class _SetLocationScreenState extends State<SetLocationScreen> {
                 ('Accuracy', '${fix.accuracy.round()} m${_good ? ' (good)' : ' (approximate)'}'),
                 ('Time', _capturedAt == null ? '' : formatDateTime(_capturedAt!)),
               ]),
-              if (!_good) ...[
+              if (_improving && fix.accuracy > _veryGoodMeters) ...[
+                const SizedBox(height: 10),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: VV.blue),
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Improving accuracy… you can save now',
+                      style: TextStyle(fontSize: 13, color: VV.inkMuted),
+                    ),
+                  ],
+                ),
+              ],
+              if (!_improving && !_good) ...[
                 const SizedBox(height: 16),
                 Callout(
                   'GPS is weak here (${fix.accuracy.round()} m). For a more exact location, step outside '

@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../app_scope.dart';
 import '../models/customer.dart';
@@ -31,6 +34,7 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
   bool _isCompany = true;
   Customer? _parent;
   bool _busy = false;
+  String? _photoPath;
 
   @override
   void dispose() {
@@ -69,6 +73,7 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
           city: _city.text,
           zip: _zip.text,
           parent: _parent,
+          photoPath: _photoPath,
         ),
       );
       if (!mounted) return;
@@ -194,6 +199,102 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
       builder: (c) => const _CompanyPicker(),
     );
     if (picked != null) setState(() => _parent = picked);
+  }
+
+  /// Camera or gallery, chosen in a small sheet.
+  Future<void> _pickPhoto() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text('Add customer photo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined, color: VV.blue, size: 28),
+              title: const Text('Take photo', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Use the camera now'),
+              onTap: () => Navigator.pop(c, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined, color: VV.blue, size: 28),
+              title: const Text(
+                'Choose from gallery',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              subtitle: const Text('Pick a photo already on this phone'),
+              onTap: () => Navigator.pop(c, ImageSource.gallery),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+    try {
+      final photo = await ImagePicker().pickImage(
+        source: source,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 70,
+      );
+      if (photo != null && mounted) setState(() => _photoPath = photo.path);
+    } on PlatformException catch (e) {
+      if (mounted) {
+        final where = source == ImageSource.camera ? 'camera' : 'gallery';
+        showMessage(context, 'Could not open $where: ${e.message ?? e.code}', error: true);
+      }
+    }
+  }
+
+  Widget _photoField() {
+    final path = _photoPath;
+    if (path == null) {
+      return OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 56)),
+        onPressed: _pickPhoto,
+        icon: const Icon(Icons.add_a_photo_outlined),
+        label: const Text('Add photo'),
+      );
+    }
+    return Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(VV.radiusMd),
+          child: Image.file(File(path), width: 96, height: 72, fit: BoxFit.cover),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Photo added',
+                style: TextStyle(fontWeight: FontWeight.w600, color: VV.success),
+              ),
+              const Text(
+                'It will be attached to the log note in Odoo.',
+                style: TextStyle(fontSize: 12, color: VV.inkMuted),
+              ),
+              Row(
+                children: [
+                  TextButton(onPressed: _pickPhoto, child: const Text('Change')),
+                  TextButton(
+                    style: TextButton.styleFrom(foregroundColor: VV.danger),
+                    onPressed: () => setState(() => _photoPath = null),
+                    child: const Text('Remove'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -324,6 +425,9 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
                       decoration: const InputDecoration(hintText: 'name@company.com'),
                       validator: (v) => Validators.emailError(v ?? ''),
                     ),
+                    const SizedBox(height: 16),
+                    const FieldLabel('Customer photo', optional: true),
+                    _photoField(),
                     const SizedBox(height: 24),
                     const Divider(),
                     const SizedBox(height: 16),

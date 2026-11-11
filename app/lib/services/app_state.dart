@@ -25,6 +25,7 @@ class NewCustomerInput {
     this.city = '',
     this.zip = '',
     this.parent,
+    this.photoPath,
   });
 
   final String name;
@@ -36,6 +37,9 @@ class NewCustomerInput {
   final String city;
   final String zip;
   final Customer? parent;
+
+  /// Optional photo (camera or gallery), attached to the "created" log note.
+  final String? photoPath;
 }
 
 /// A location captured on the "Set location" screen.
@@ -564,6 +568,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<Customer> addCustomer(NewCustomerInput input) async {
     final ref = _newRef();
+    String? photo;
+    if (input.photoPath != null) photo = await store.keepPhoto(input.photoPath!, ref);
     final vals = <String, dynamic>{
       'name': input.name.trim(),
       'is_company': input.isCompany,
@@ -589,6 +595,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
           'countryCode': 'IN',
           if (gstState != null) 'state': gstState,
           if (parent != null && parent.isLocal) 'parentRef': parent.localRef,
+          if (photo != null) 'photo': photo,
           'userName': userName,
         },
       ),
@@ -842,10 +849,12 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _sendCreate(PendingAction a) async {
-    // Already created (the app stopped right after): just link it again.
+    // Already created (the app stopped right after): link it again, then
+    // finish the log note below if it was not posted yet.
     final known = refToId[a.ref];
     if (known != null) {
       _linkCreated(a, known);
+      await _postCreatedNote(a, known);
       return;
     }
     final vals = Map<String, dynamic>.from(a.payload['vals'] as Map);
@@ -873,15 +882,56 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     }
     _linkCreated(a, newId);
     await _saveSettings();
+    await _postCreatedNote(a, newId);
+  }
+
+  /// "Customer created…" log note, with the customer photo attached if one
+  /// was taken. If the network drops, the entry stays waiting and only the
+  /// note is sent again (the customer is not created twice).
+  Future<void> _postCreatedNote(PendingAction a, int partnerId) async {
+    if (a.payload['notePosted'] == true) return;
     try {
+      final photo = a.payload['photo'] as String?;
+      final attachments = <int>[
+        if (photo != null && photo.isNotEmpty)
+          await _uploadPhoto(photo, 'Customer photo ${formatDate(a.createdAt)}.jpg'),
+      ];
       await _postNote(
-        newId,
+        partnerId,
         'Customer created with VeeVee Field Locator by '
-        '${_by(a)} on ${formatDateTime(a.createdAt)}.',
+        '${_by(a)} on ${formatDateTime(a.createdAt)}.'
+        '${attachments.isNotEmpty ? ' Photo attached.' : ''}',
+        attachmentIds: attachments,
       );
-    } catch (_) {
-      // The customer exists; a missing note is not worth a duplicate.
+    } on OdooNetworkException {
+      rethrow; // try the note again later
+    } on FileSystemException {
+      // Photo file gone: post the note without it.
+      a.payload.remove('photo');
+      await _postNote(
+        partnerId,
+        'Customer created with VeeVee Field Locator by ${_by(a)} on ${formatDateTime(a.createdAt)}.',
+      );
+    } on OdooException {
+      // The customer exists; Odoo refused only the note. Do not block on it.
     }
+    a.payload['notePosted'] = true;
+    await _saveQueue();
+  }
+
+  /// Uploads a photo for the next log note and returns its attachment id.
+  Future<int> _uploadPhoto(String path, String name) async {
+    final bytes = await File(path).readAsBytes();
+    final id = await _call('ir.attachment', 'create', [
+      {
+        'name': name,
+        'datas': base64Encode(bytes),
+        'mimetype': 'image/jpeg',
+        'res_model': 'mail.compose.message',
+        'res_id': 0,
+      },
+    ]);
+    return id is int ? id : (id as List).first as int;
   }
 
   Future<void> _sendLocation(PendingAction a) async {
@@ -919,21 +969,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       vals,
     ]);
 
-    final attachments = <int>[];
     final photo = p['photo'] as String?;
-    if (photo != null && photo.isNotEmpty) {
-      final bytes = await File(photo).readAsBytes();
-      final attId = await _call('ir.attachment', 'create', [
-        {
-          'name': 'Site photo ${formatDate(captured)}.jpg',
-          'datas': base64Encode(bytes),
-          'mimetype': 'image/jpeg',
-          'res_model': 'mail.compose.message',
-          'res_id': 0,
-        },
-      ]);
-      attachments.add(attId is int ? attId : (attId as List).first as int);
-    }
+    final attachments = <int>[
+      if (photo != null && photo.isNotEmpty)
+        await _uploadPhoto(photo, 'Site photo ${formatDate(captured)}.jpg'),
+    ];
 
     final moved = (p['pinMoved'] as num? ?? 0).toDouble();
     final remark = (p['remark'] ?? '').toString();

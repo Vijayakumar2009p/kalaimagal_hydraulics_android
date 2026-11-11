@@ -66,7 +66,7 @@ Do **not** switch on two-factor authentication for this login; the app cannot us
 | `vv_gps_captured`, `vv_gps_accuracy`, `vv_gps_by` | (module, stored but not shown) GPS capture, accuracy, person |
 | Chatter (log note) | "Location set on site with VeeVee Field Locator by Ravi on 05-11-2026, 10:42. Lat …, Long …. GPS accuracy 8 m." |
 
-New customers are created with: name, company/individual, phone, email, GSTIN, address and (for individuals) the company they work at.
+New customers are created with: name, company/individual, phone, email, GSTIN, address and (for individuals) the company they work at. An optional photo (camera or gallery) is attached to the "Customer created…" log note in the contact's chatter.
 
 Note: Odoo 19 has no separate *Mobile* field on contacts, so the mobile number is saved in **Phone**. If a module adds a `mobile` field, the app uses it automatically.
 
@@ -160,7 +160,7 @@ Phones show "New version available" after their next login or app start.
 - **Login**: username/password over Odoo's standard web session (`/web/session/authenticate`). With *Keep me logged in*, the password is kept in Android's encrypted storage so the app can log in again by itself when the Odoo session expires.
 - **Your name**: asked once per phone. Everyone shares one Odoo login, so this name goes into each chatter note.
 - **Customers**: all contacts (companies and individuals, except your own staff users and invoice/delivery addresses) are downloaded to the phone, so search works offline. One search box matches name, mobile, GSTIN and city.
-- **Set location**: after location permission is allowed, the app takes the phone's current location by itself (it waits up to 15 seconds for the most accurate reading, and stops early at 20 m or better), shows latitude, longitude and accuracy, and the person taps **Save location**. *Retake* takes a fresh reading. Fake-GPS apps are blocked. The customer's address is not changed.
+- **Set location**: after location permission is allowed, the app takes the phone's current location by itself. The **Save location** button is ready as soon as the first reading arrives; GPS keeps improving the reading in the background until Save is tapped. *Find again* takes a fresh reading. Fake-GPS apps are blocked. The customer's address is not changed.
 - **Existing location**: the app shows saved vs new point and distance, and asks before replacing.
 - **Duplicates**: a new customer with the same mobile or GSTIN as an existing one shows a warning with the match.
 - **Offline**: everything is saved on the phone first and sent to Odoo when the network is back (automatically every minute, on app open, or with *Sync now*). Entries Odoo refuses are shown in Settings with the reason, *Try again* and *Delete*.
