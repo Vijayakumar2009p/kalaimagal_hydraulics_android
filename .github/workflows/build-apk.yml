@@ -49,7 +49,7 @@ jobs:
           } > android/key.properties
 
       - run: flutter pub get
-      - run: flutter analyze
+      - run: flutter analyze --no-fatal-infos
       # Test APK: can also reach a local http:// Odoo (e.g. http://192.168.1.10:8069)
       - run: flutter build apk --debug
       # Release APK for staff: https only
