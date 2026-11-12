@@ -5,7 +5,7 @@ class AppConfig {
   static const String appName = 'VeeVee Field Locator';
 
   /// Must match `version:` in pubspec.yaml (the part before `+`).
-  static const String appVersion = '1.0.4';
+  static const String appVersion = '1.0.5';
 
   /// Pre-filled on the login screen (Advanced settings).
   static const String defaultServerUrl = 'https://www.veeveeinfotech.com';

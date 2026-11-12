@@ -1,6 +1,6 @@
 {
     'name': 'VeeVee Field Locator',
-    'version': '19.0.1.0.1',
+    'version': '19.0.1.0.2',
     'category': 'Sales/CRM',
     'summary': 'Support module for the VeeVee Field Locator Android app (GPS-pinned contacts)',
     'description': """

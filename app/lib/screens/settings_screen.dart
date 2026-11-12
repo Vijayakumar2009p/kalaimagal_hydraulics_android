@@ -84,8 +84,25 @@ class SettingsScreen extends StatelessWidget {
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: VV.ink),
               ),
               trailing: TextButton(
-                onPressed: () =>
-                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const YourNameScreen(editing: true))),
+                onPressed: () async {
+                  final yes = await showDialog<bool>(
+                    context: context,
+                    builder: (d) => AlertDialog(
+                      title: const Text('Change your name?'),
+                      content: Text(
+                        'Your name "${app.userName}" is written in every note sent to Odoo. '
+                        'Do you really want to change it?',
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('No')),
+                        FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('Yes, change')),
+                      ],
+                    ),
+                  );
+                  if (yes == true && context.mounted) {
+                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const YourNameScreen(editing: true)));
+                  }
+                },
                 child: const Text('Change'),
               ),
             ),
@@ -186,9 +203,7 @@ class _PendingRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = AppScope.read(context);
     final waitingForCustomer =
-        action.kind == PendingAction.location &&
-        action.partnerId == null &&
-        !app.refToId.containsKey(action.partnerRef);
+        action.kind != PendingAction.create && action.partnerId == null && !app.refToId.containsKey(action.partnerRef);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
       child: Column(
@@ -230,6 +245,8 @@ class _PendingRow extends StatelessWidget {
                         content: Text(
                           action.kind == PendingAction.create
                               ? 'The new customer and its location will be removed from this phone.'
+                              : action.kind == PendingAction.photos
+                              ? 'These photos will be removed from this phone.'
                               : 'This location will be removed from this phone.',
                         ),
                         actions: [

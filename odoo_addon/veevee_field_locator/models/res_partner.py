@@ -9,6 +9,8 @@ WRITE_ALLOWED = {
     'vv_gps_captured', 'vv_gps_accuracy', 'vv_gps_by',
     'street', 'street2', 'city', 'zip', 'state_id', 'country_id',
     'message_main_attachment_id',
+    # profile picture chosen from the photos taken in the app
+    'image_1920',
 }
 
 # Fields it may fill when creating a contact from the app.

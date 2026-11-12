@@ -19,8 +19,8 @@ Applies to: **Odoo 19** (Enterprise or Community: the geolocation fields come fr
    then install **VeeVee Field Locator** and create the field user (section 1).
 2. Find the PC's address: `hostname -I` (e.g. `192.168.1.10`). Allow the port: `sudo ufw allow 8069/tcp`.
 3. On the phone (same Wi-Fi), open `http://192.168.1.10:8069` in Chrome to be sure it loads.
-4. Build a **debug** APK (`flutter build apk --debug`) or run over USB (`flutter run`). Only debug builds allow `http://`.
-5. In the app, page 1 **Odoo server**: type `http://192.168.1.10:8069` and tap **Find**; page 2: choose the database; page 3: login and password.
+4. Build a **debug** APK (`flutter build apk --debug`) or run over USB (`flutter run`). Only the TEST (debug) build allows `http://`; the RELEASE build needs `https://`.
+5. In the app, page 1 **Odoo server**: choose `http://` in the dropdown, type `192.168.1.10:8069` and tap **Find**; page 2: choose the database; page 3: login and password.
 
 `localhost` does not work from the phone: on the phone, "localhost" is the phone itself.
 
@@ -64,9 +64,10 @@ Do **not** switch on two-factor authentication for this login; the app cannot us
 | `partner_latitude`, `partner_longitude` | GPS position of the pin, 7 decimals |
 | `date_localization` | date captured |
 | `vv_gps_captured`, `vv_gps_accuracy`, `vv_gps_by` | (module, stored but not shown) GPS capture, accuracy, person |
+| `image_1920` | profile picture, from the photo starred in the app |
 | Chatter (log note) | "Location set on site with VeeVee Field Locator by Ravi on 05-11-2026, 10:42. Lat …, Long …. GPS accuracy 8 m." |
 
-New customers are created with: name, company/individual, phone, email, GSTIN, address and (for individuals) the company they work at. **Add contact** (under Mobile) adds any number of contact persons with name and mobile; each is created in Odoo as a contact under the new customer (company or individual). An optional photo (camera or gallery) is attached to the "Customer created…" log note in the contact's chatter.
+New customers are created with: name, company/individual, phone, email, GSTIN (companies only), address and (for individuals) the company they work at. **Add contact** (under Mobile) adds any number of contact persons with name and mobile; each is created in Odoo as a contact under the new customer (company or individual). Up to 5 optional photos (camera or gallery) are attached to the "Customer created…" log note in the contact's chatter; the starred one (the first by default) becomes the contact's profile picture. On an existing customer, **Add photos** does the same (profile picture only if switched on). The profile picture needs module version 19.0.1.0.2 or newer.
 
 Note: Odoo 19 has no separate *Mobile* field on contacts, so the mobile number is saved in **Phone**. If a module adds a `mobile` field, the app uses it automatically.
 
@@ -81,7 +82,7 @@ static const String defaultServerUrl = 'https://www.veeveeinfotech.com';
 static const String defaultDatabase = '';   // put your database name here
 ```
 
-The database list is fetched automatically when the server allows it. If your server hides it (common), the name typed here is used, so staff only enter login and password. The login is three pages: **1. Odoo server** (URL, then *Find*) → **2. Database** (pick from the list, or type the name if the server hides it) → **3. Login** (login and password).
+The database list is fetched automatically when the server allows it. If your server hides it (common), the name typed here is used, so staff only enter login and password. The login is three pages: **1. Odoo server** (choose `https://` or `http://`, type the rest of the address, then *Next*) → **2. Database** (pick from the list, or type the name if the server hides it) → **3. Login** (login and password).
 
 Other settings in the same file: GPS accuracy needed (20 m), "Save anyway" wait (45 s), sync interval.
 
@@ -170,6 +171,9 @@ Phones show "New version available" after their next login or app start.
 ## 6. Test checklist (first phone)
 
 - [ ] Page 1 server URL → Find → page 2 database → page 3 login with the field login
+- [ ] New individual → no GSTIN field; New company → GSTIN shown
+- [ ] New customer with 3 photos, star the 2nd → Odoo picture = 2nd photo, log note has 3 photos
+- [ ] Existing customer → Add photos → photos in log note
 - [ ] New customer → Add contact (name + mobile) for a company and for an individual → both appear in Odoo under the customer's Contacts tab
 - [ ] Enter your name; customer list loads; search by name, mobile, GSTIN, city
 - [ ] Open a customer → Set location → location is taken by itself → Save location → Odoo contact shows Lat/Long in Partner Assignment, plus a chatter note

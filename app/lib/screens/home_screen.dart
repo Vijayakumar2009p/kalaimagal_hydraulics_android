@@ -114,7 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Image.asset('assets/images/logo_mark.png', width: 30, height: 27),
               const SizedBox(width: 8),
               const Text(
-                'Field Locator',
+                'Contacts',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: VV.ink),
               ),
             ],

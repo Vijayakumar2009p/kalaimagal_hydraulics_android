@@ -5,7 +5,6 @@ import '../app_scope.dart';
 import '../config.dart';
 import '../screens/new_customer_screen.dart';
 import '../screens/settings_screen.dart';
-import '../screens/your_name_screen.dart';
 import '../theme.dart';
 import '../utils/format.dart';
 import 'common.dart';
@@ -31,7 +30,6 @@ class AppDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final host = Uri.tryParse(app.serverUrl)?.host ?? app.serverUrl;
     final nav = Navigator.of(context);
 
     void close() => nav.pop();
@@ -78,17 +76,6 @@ class AppDrawer extends StatelessWidget {
                 Text(
                   app.userName.isEmpty ? 'Field staff' : app.userName,
                   style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Odoo: ${app.odooUserName.isNotEmpty ? app.odooUserName : app.login}',
-                  style: const TextStyle(color: Color(0xFFDCEBF7), fontSize: 13),
-                ),
-                Text(
-                  '$host · ${app.database}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFFDCEBF7), fontSize: 13),
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -159,7 +146,6 @@ class AppDrawer extends StatelessWidget {
                   },
                 ),
                 const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider()),
-                _item(Icons.badge_outlined, 'Change your name', onTap: () => open(const YourNameScreen(editing: true))),
                 _item(Icons.settings_outlined, 'Settings', onTap: () => open(const SettingsScreen())),
                 _item(
                   Icons.system_update_outlined,

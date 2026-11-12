@@ -25,7 +25,8 @@ class NewCustomerInput {
     this.city = '',
     this.zip = '',
     this.parent,
-    this.photoPath,
+    this.photoPaths = const [],
+    this.profilePhoto,
     this.contacts = const [],
   });
 
@@ -39,8 +40,11 @@ class NewCustomerInput {
   final String zip;
   final Customer? parent;
 
-  /// Optional photo (camera or gallery), attached to the "created" log note.
-  final String? photoPath;
+  /// Optional photos (camera or gallery), attached to the "created" log note.
+  final List<String> photoPaths;
+
+  /// Index in [photoPaths] of the photo to use as the Odoo profile picture.
+  final int? profilePhoto;
 
   /// Contact persons of a new company ("Add contact"); created under it.
   final List<ContactInput> contacts;
@@ -317,7 +321,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       // Tell Odoo in the background; do not wait (the phone may be offline).
       unawaited(client.logout().whenComplete(client.close));
     }
-    final photos = queue.map((a) => a.payload['photo'] as String?).toList();
+    final photos = [for (final a in queue) ...photosOf(a.payload)];
     _password = null;
     loggedIn = false;
     needsLogin = false;
@@ -569,8 +573,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<Customer> addCustomer(NewCustomerInput input) async {
     final ref = _newRef();
-    String? photo;
-    if (input.photoPath != null) photo = await store.keepPhoto(input.photoPath!, ref);
+    final photos = await _keepPhotos(input.photoPaths, ref);
     final vals = <String, dynamic>{
       'name': input.name.trim(),
       'is_company': input.isCompany,
@@ -596,7 +599,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
           'countryCode': 'IN',
           if (gstState != null) 'state': gstState,
           if (parent != null && parent.isLocal) 'parentRef': parent.localRef,
-          if (photo != null) 'photo': photo,
+          if (photos.isNotEmpty) 'photos': photos,
+          if (photos.isNotEmpty) 'profile': (input.profilePhoto ?? 0).clamp(0, photos.length - 1),
           'userName': userName,
         },
       ),
@@ -701,7 +705,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final older = queue.where((a) => a.kind == PendingAction.location && sameCustomer(a)).toList();
     for (final a in older) {
       queue.remove(a);
-      await store.deletePhoto(a.payload['photo'] as String?);
+      await _deletePhotos(a.payload);
     }
     queue.add(action);
     _applyLocation(c, action.payload);
@@ -793,11 +797,13 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       try {
         if (action.kind == PendingAction.create) {
           await _sendCreate(action);
+        } else if (action.kind == PendingAction.photos) {
+          await _sendPhotos(action);
         } else {
           await _sendLocation(action);
         }
         queue.remove(action);
-        await store.deletePhoto(action.payload['photo'] as String?);
+        await _deletePhotos(action.payload);
       } on _WaitForCreate {
         continue;
       } on OdooNetworkException catch (e) {
@@ -811,6 +817,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         action.blocked = true; // Odoo refused it; needs a person to look
       } on FileSystemException {
         action.payload.remove('photo'); // photo file lost: send without it
+        action.payload['photos'] = [
+          for (final p in photosOf(action.payload))
+            if (File(p).existsSync()) p,
+        ];
       } catch (e) {
         // Anything unexpected: keep the entry and try again later.
         action.attempts++;
@@ -839,7 +849,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     }
     for (final a in removed) {
       queue.remove(a);
-      await store.deletePhoto(a.payload['photo'] as String?);
+      await _deletePhotos(a.payload);
     }
     _applyPendingToCustomers();
     await _saveQueue();
@@ -923,38 +933,142 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     await _postCreatedNote(a, newId);
   }
 
-  /// "Customer created…" log note, with the customer photo attached if one
-  /// was taken. If the network drops, the entry stays waiting and only the
-  /// note is sent again (the customer is not created twice).
+  /// "Customer created…" log note, with the customer photos attached, and
+  /// the chosen photo set as profile picture. If the network drops, the entry
+  /// stays waiting and only these steps are sent again (the customer is not
+  /// created twice).
   Future<void> _postCreatedNote(PendingAction a, int partnerId) async {
+    final profileSet = await _setProfilePicture(a, partnerId);
     if (a.payload['notePosted'] == true) return;
     try {
-      final photo = a.payload['photo'] as String?;
-      final attachments = <int>[
-        if (photo != null && photo.isNotEmpty)
-          await _uploadPhoto(photo, 'Customer photo ${formatDate(a.createdAt)}.jpg'),
-      ];
+      final attachments = await _uploadPhotos(a, 'Customer photo');
+      final extra = StringBuffer();
+      if (attachments.isNotEmpty) {
+        extra.write(attachments.length == 1 ? ' Photo attached.' : ' ${attachments.length} photos attached.');
+      }
+      if (profileSet) extra.write(' Profile picture set.');
       await _postNote(
         partnerId,
         'Customer created with VeeVee Field Locator by '
-        '${_by(a)} on ${formatDateTime(a.createdAt)}.'
-        '${attachments.isNotEmpty ? ' Photo attached.' : ''}',
+        '${_by(a)} on ${formatDateTime(a.createdAt)}.$extra',
         attachmentIds: attachments,
       );
     } on OdooNetworkException {
       rethrow; // try the note again later
-    } on FileSystemException {
-      // Photo file gone: post the note without it.
-      a.payload.remove('photo');
-      await _postNote(
-        partnerId,
-        'Customer created with VeeVee Field Locator by ${_by(a)} on ${formatDateTime(a.createdAt)}.',
-      );
     } on OdooException {
       // The customer exists; Odoo refused only the note. Do not block on it.
     }
     a.payload['notePosted'] = true;
     await _saveQueue();
+  }
+
+  /// Photos added later to an existing customer (customer page → Add photos).
+  Future<void> _sendPhotos(PendingAction a) async {
+    final partnerId = a.partnerId ?? (a.partnerRef != null ? refToId[a.partnerRef] : null);
+    if (partnerId == null) throw _WaitForCreate();
+    a.partnerId = partnerId;
+    final profileSet = await _setProfilePicture(a, partnerId);
+    if (a.payload['notePosted'] == true) return;
+    final attachments = await _uploadPhotos(a, 'Site photo');
+    if (attachments.isEmpty && !profileSet) return; // photo files gone: nothing to send
+    final n = attachments.length;
+    await _postNote(
+      partnerId,
+      'Photos added with VeeVee Field Locator by ${_by(a)} on ${formatDateTime(a.createdAt)}. '
+      '${n == 1 ? '1 photo attached.' : '$n photos attached.'}'
+      '${profileSet ? ' Profile picture updated.' : ''}',
+      attachmentIds: attachments,
+    );
+    a.payload['notePosted'] = true;
+    await _saveQueue();
+  }
+
+  /// Sets the chosen photo as the contact's profile picture (once).
+  /// Returns true when it is (or already was) set.
+  Future<bool> _setProfilePicture(PendingAction a, int partnerId) async {
+    if (a.payload['profileDone'] == true) return a.payload['profileSet'] == true;
+    final photos = photosOf(a.payload);
+    final index = (a.payload['profile'] as int?) ?? 0;
+    var ok = false;
+    if (photos.isNotEmpty && index >= 0 && index < photos.length) {
+      final file = File(photos[index]);
+      if (await file.exists()) {
+        try {
+          await _call('res.partner', 'write', [
+            [partnerId],
+            {'image_1920': base64Encode(await file.readAsBytes())},
+          ]);
+          ok = true;
+        } on OdooNetworkException {
+          rethrow;
+        } on OdooException {
+          // Refused (e.g. the Odoo module is older): keep the photos in the note.
+        }
+      }
+    }
+    a.payload['profileDone'] = true;
+    a.payload['profileSet'] = ok;
+    await _saveQueue();
+    return ok;
+  }
+
+  /// Uploads every photo file still on the phone; returns attachment ids.
+  Future<List<int>> _uploadPhotos(PendingAction a, String title) async {
+    final photos = [
+      for (final p in photosOf(a.payload))
+        if (await File(p).exists()) p,
+    ];
+    final ids = <int>[];
+    for (var i = 0; i < photos.length; i++) {
+      final n = photos.length > 1 ? ' ${i + 1}' : '';
+      ids.add(await _uploadPhoto(photos[i], '$title$n ${formatDate(a.createdAt)}.jpg'));
+    }
+    return ids;
+  }
+
+  /// All photo files of an entry (new list, plus the older single `photo`).
+  static List<String> photosOf(Map<String, dynamic> payload) => [
+    ...((payload['photos'] as List?) ?? const []).cast<String>(),
+    if (payload['photo'] is String && (payload['photo'] as String).isNotEmpty) payload['photo'] as String,
+  ];
+
+  Future<void> _deletePhotos(Map<String, dynamic> payload) async {
+    for (final p in photosOf(payload)) {
+      await store.deletePhoto(p);
+    }
+  }
+
+  /// Copies picked photos into the app's own folder (the picker's copies are temporary).
+  Future<List<String>> _keepPhotos(List<String> paths, String ref) async => [
+    for (var i = 0; i < paths.length; i++) await store.keepPhoto(paths[i], '$ref-$i'),
+  ];
+
+  /// Queues photos for an existing customer (and optionally a new profile picture).
+  Future<String> addPhotos(Customer customer, List<String> paths, int? profile) async {
+    final ref = _newRef();
+    final c = resolve(customer);
+    final photos = await _keepPhotos(paths, ref);
+    queue.add(
+      PendingAction(
+        ref: ref,
+        kind: PendingAction.photos,
+        createdAt: DateTime.now(),
+        customerName: c.name,
+        partnerId: c.isLocal ? null : c.id,
+        partnerRef: c.isLocal ? c.localRef : null,
+        payload: {'photos': photos, if (profile != null) 'profile': profile, 'userName': userName},
+      ),
+    );
+    c.pending = true;
+    await _saveQueue();
+    await _saveCustomers();
+    notifyListeners();
+    try {
+      await syncNow();
+    } catch (_) {
+      // Saved on the phone; it will be sent later.
+    }
+    return ref;
   }
 
   /// Uploads a photo for the next log note and returns its attachment id.

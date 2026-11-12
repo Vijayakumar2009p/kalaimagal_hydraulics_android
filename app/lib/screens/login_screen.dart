@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../app_scope.dart';
@@ -40,11 +41,32 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _busy = false;
   String? _error;
 
+  /// Chosen in the dropdown before the address box.
+  String _scheme = 'https://';
+
+  static String _stripScheme(String url) => url.replaceFirst(RegExp(r'^\s*https?://', caseSensitive: false), '');
+
+  /// Full server address: dropdown + typed part.
+  String get _fullUrl => OdooClient.normalizeUrl('$_scheme${_stripScheme(_url.text).trim()}');
+
+  /// If a full address is pasted, move "http://" or "https://" into the dropdown.
+  void _onUrlChanged(String v) {
+    final m = RegExp(r'^\s*(https?://)', caseSensitive: false).firstMatch(v);
+    if (m == null) return;
+    final rest = v.substring(m.end);
+    setState(() => _scheme = m.group(1)!.toLowerCase());
+    _url.value = TextEditingValue(
+      text: rest,
+      selection: TextSelection.collapsed(offset: rest.length),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
     final app = AppScope.read(context);
-    _url = TextEditingController(text: app.serverUrl);
+    _scheme = app.serverUrl.startsWith('http://') ? 'http://' : 'https://';
+    _url = TextEditingController(text: _stripScheme(app.serverUrl));
     final savedDb = app.database.isNotEmpty ? app.database : AppConfig.defaultDatabase;
     _dbName = TextEditingController(text: savedDb);
     _user = TextEditingController(text: app.login);
@@ -75,7 +97,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _findServer() async {
     FocusScope.of(context).unfocus();
     if (!_serverForm.currentState!.validate()) return;
-    final url = OdooClient.normalizeUrl(_url.text);
+    final url = _fullUrl;
     setState(() {
       _busy = true;
       _error = null;
@@ -100,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _dbListHidden = true;
     }
     if (!mounted) return;
-    _url.text = url;
+    _url.text = _stripScheme(url);
     final previous = _selectedDb ?? app.database;
     _selectedDb = _databases.contains(previous) ? previous : (_databases.length == 1 ? _databases.first : null);
     setState(() => _busy = false);
@@ -123,7 +145,7 @@ class _LoginScreenState extends State<LoginScreen> {
     FocusScope.of(context).unfocus();
     if (!_loginForm.currentState!.validate()) return;
     final app = AppScope.read(context);
-    final url = OdooClient.normalizeUrl(_url.text);
+    final url = _fullUrl;
     final db = _database;
     final changingServer =
         app.queue.isNotEmpty && (url != app.serverUrl || db != app.database || _user.text.trim() != app.login);
@@ -222,13 +244,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 16),
                 Callout(_error!, tone: Tone.danger, icon: Icons.error_outline),
               ],
-              const SizedBox(height: 24),
-              const Center(
-                child: Text(
-                  'Need help? Call ${AppConfig.supportPhone}',
-                  style: TextStyle(fontSize: 12, color: VV.inkMuted),
-                ),
-              ),
             ],
           ),
         ),
@@ -266,18 +281,40 @@ class _LoginScreenState extends State<LoginScreen> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _title('Odoo server', 'Enter the address of your Odoo, for example www.veeveeinfotech.com'),
+        _title('Odoo server', 'Choose https:// or http://, then type the rest of the address.'),
         const FieldLabel('Odoo server URL'),
         TextFormField(
           controller: _url,
           keyboardType: TextInputType.url,
           autocorrect: false,
           textInputAction: TextInputAction.go,
+          onChanged: _onUrlChanged,
           onFieldSubmitted: (_) => _findServer(),
-          decoration: const InputDecoration(prefixIcon: Icon(Icons.dns_outlined)),
+          decoration: InputDecoration(
+            hintText: 'www.veeveeinfotech.com',
+            prefixIcon: Padding(
+              padding: const EdgeInsets.only(left: 8, right: 4),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _scheme,
+                  borderRadius: BorderRadius.circular(VV.radiusMd),
+                  style: const TextStyle(fontSize: 16, color: VV.ink, fontWeight: FontWeight.w600),
+                  items: const [
+                    DropdownMenuItem(value: 'https://', child: Text('https://')),
+                    DropdownMenuItem(value: 'http://', child: Text('http://')),
+                  ],
+                  onChanged: _busy ? null : (v) => setState(() => _scheme = v ?? 'https://'),
+                ),
+              ),
+            ),
+          ),
           validator: (v) {
-            final u = Uri.tryParse(OdooClient.normalizeUrl(v ?? ''));
-            return (u == null || u.host.isEmpty) ? 'Enter the server address.' : null;
+            final u = Uri.tryParse(_fullUrl);
+            if (u == null || u.host.isEmpty) return 'Enter the server address.';
+            if (kReleaseMode && _scheme == 'http://') {
+              return 'This app needs https:// (http:// works only in the test app).';
+            }
+            return null;
           },
         ),
         const SizedBox(height: 24),
@@ -295,7 +332,7 @@ class _LoginScreenState extends State<LoginScreen> {
           'Choose database',
           _dbListHidden
               ? 'This server hides its database list. Type the database name.'
-              : 'Server: ${Uri.tryParse(_url.text)?.host ?? _url.text}',
+              : 'Server: ${Uri.tryParse(_fullUrl)?.host ?? _url.text}',
         ),
         if (_dbListHidden) ...[
           const FieldLabel('Database name'),
@@ -327,7 +364,7 @@ class _LoginScreenState extends State<LoginScreen> {
   );
 
   Widget _loginPage() {
-    final host = Uri.tryParse(OdooClient.normalizeUrl(_url.text))?.host ?? _url.text;
+    final host = Uri.tryParse(_fullUrl)?.host ?? _url.text;
     return Form(
       key: _loginForm,
       child: Column(

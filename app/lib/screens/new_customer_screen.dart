@@ -1,8 +1,5 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../app_scope.dart';
 import '../models/customer.dart';
@@ -10,6 +7,7 @@ import '../services/app_state.dart';
 import '../theme.dart';
 import '../utils/validators.dart';
 import '../widgets/common.dart';
+import '../widgets/photo_strip.dart';
 import 'customer_screen.dart';
 import 'set_location_screen.dart';
 
@@ -34,7 +32,7 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
   bool _isCompany = true;
   Customer? _parent;
   bool _busy = false;
-  String? _photoPath;
+  final _photos = PhotoSelection();
   final List<_ContactRow> _contacts = [];
 
   @override
@@ -127,7 +125,7 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
     setState(() => _busy = true);
     final app = AppScope.read(context);
     try {
-      final dups = await app.findDuplicates(_mobile.text, _gstin.text);
+      final dups = await app.findDuplicates(_mobile.text, _isCompany ? _gstin.text : '');
       if (!mounted) return;
       if (dups.isNotEmpty) {
         final choice = await _showDuplicates(dups);
@@ -143,12 +141,13 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
           isCompany: _isCompany,
           phone: _mobile.text,
           email: _email.text,
-          vat: _gstin.text,
+          vat: _isCompany ? _gstin.text : '',
           street: _street.text,
           city: _city.text,
           zip: _zip.text,
           parent: _parent,
-          photoPath: _photoPath,
+          photoPaths: List.of(_photos.paths),
+          profilePhoto: _photos.profileIndex,
           contacts: [for (final r in _contacts) ContactInput(name: r.name.text, phone: r.phone.text)],
         ),
       );
@@ -271,97 +270,9 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
     if (picked != null) setState(() => _parent = picked);
   }
 
-  /// Camera or gallery, chosen in a small sheet.
-  Future<void> _pickPhoto() async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      showDragHandle: true,
-      builder: (c) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8),
-              child: Text('Add customer photo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined, color: VV.blue, size: 28),
-              title: const Text('Take photo', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-              subtitle: const Text('Use the camera now'),
-              onTap: () => Navigator.pop(c, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined, color: VV.blue, size: 28),
-              title: const Text('Choose from gallery', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-              subtitle: const Text('Pick a photo already on this phone'),
-              onTap: () => Navigator.pop(c, ImageSource.gallery),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-    if (source == null) return;
-    try {
-      final photo = await ImagePicker().pickImage(source: source, maxWidth: 1600, maxHeight: 1600, imageQuality: 70);
-      if (photo != null && mounted) setState(() => _photoPath = photo.path);
-    } on PlatformException catch (e) {
-      if (mounted) {
-        final where = source == ImageSource.camera ? 'camera' : 'gallery';
-        showMessage(context, 'Could not open $where: ${e.message ?? e.code}', error: true);
-      }
-    }
-  }
-
-  Widget _photoField() {
-    final path = _photoPath;
-    if (path == null) {
-      return OutlinedButton.icon(
-        style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 56)),
-        onPressed: _pickPhoto,
-        icon: const Icon(Icons.add_a_photo_outlined),
-        label: const Text('Add photo'),
-      );
-    }
-    return Row(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(VV.radiusMd),
-          child: Image.file(File(path), width: 96, height: 72, fit: BoxFit.cover),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Photo added',
-                style: TextStyle(fontWeight: FontWeight.w600, color: VV.success),
-              ),
-              const Text(
-                'It will be attached to the log note in Odoo.',
-                style: TextStyle(fontSize: 12, color: VV.inkMuted),
-              ),
-              Row(
-                children: [
-                  TextButton(onPressed: _pickPhoto, child: const Text('Change')),
-                  TextButton(
-                    style: TextButton.styleFrom(foregroundColor: VV.danger),
-                    onPressed: () => setState(() => _photoPath = null),
-                    child: const Text('Remove'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final gstState = Validators.gstinError(_gstin.text) == null && _gstin.text.trim().isNotEmpty
+    final gstState = _isCompany && Validators.gstinError(_gstin.text) == null && _gstin.text.trim().isNotEmpty
         ? Validators.gstinState(_gstin.text)
         : null;
     return Scaffold(
@@ -445,36 +356,38 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
                         label: Text(_contacts.isEmpty ? 'Add contact' : 'Add another contact'),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    const FieldLabel('GSTIN', optional: true),
-                    TextFormField(
-                      controller: _gstin,
-                      textCapitalization: TextCapitalization.characters,
-                      textInputAction: TextInputAction.next,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9A-Za-z]')),
-                        LengthLimitingTextInputFormatter(15),
-                        _UpperCase(),
-                      ],
-                      onChanged: (_) => setState(() {}),
-                      autovalidateMode: AutovalidateMode.onUserInteraction,
-                      decoration: const InputDecoration(hintText: '33AAFCK5678M1ZZ'),
-                      validator: (v) => Validators.gstinError(v ?? ''),
-                    ),
-                    if (gstState != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.check, size: 14, color: VV.success),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Valid GSTIN · $gstState (${_gstin.text.substring(0, 2)})',
-                              style: const TextStyle(fontSize: 12, color: VV.success, fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
+                    if (_isCompany) ...[
+                      const SizedBox(height: 16),
+                      const FieldLabel('GSTIN', optional: true),
+                      TextFormField(
+                        controller: _gstin,
+                        textCapitalization: TextCapitalization.characters,
+                        textInputAction: TextInputAction.next,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9A-Za-z]')),
+                          LengthLimitingTextInputFormatter(15),
+                          _UpperCase(),
+                        ],
+                        onChanged: (_) => setState(() {}),
+                        autovalidateMode: AutovalidateMode.onUserInteraction,
+                        decoration: const InputDecoration(hintText: '33AAFCK5678M1ZZ'),
+                        validator: (v) => Validators.gstinError(v ?? ''),
                       ),
+                      if (gstState != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.check, size: 14, color: VV.success),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Valid GSTIN · $gstState (${_gstin.text.substring(0, 2)})',
+                                style: const TextStyle(fontSize: 12, color: VV.success, fontWeight: FontWeight.w500),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
                     const SizedBox(height: 16),
                     const FieldLabel('Email', optional: true),
                     TextFormField(
@@ -486,8 +399,8 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
                       validator: (v) => Validators.emailError(v ?? ''),
                     ),
                     const SizedBox(height: 16),
-                    const FieldLabel('Customer photo', optional: true),
-                    _photoField(),
+                    const FieldLabel('Customer photos', optional: true),
+                    PhotoStrip(selection: _photos, enabled: !_busy, onChanged: () => setState(() {})),
                     const SizedBox(height: 24),
                     const Divider(),
                     const SizedBox(height: 16),

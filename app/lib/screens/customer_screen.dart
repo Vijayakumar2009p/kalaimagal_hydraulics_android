@@ -7,6 +7,7 @@ import '../models/pending_action.dart';
 import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
+import 'add_photos_screen.dart';
 import 'set_location_screen.dart';
 
 /// Customer details. The app only sets the location here; other details
@@ -93,6 +94,14 @@ class CustomerScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   if (c.hasLocation) _LocationCard(c, waiting: waitingLocation) else const _NoLocationCard(),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 52)),
+                    onPressed: () =>
+                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => AddPhotosScreen(customer: c))),
+                    icon: const Icon(Icons.add_a_photo_outlined),
+                    label: const Text('Add photos', style: TextStyle(fontSize: 16)),
+                  ),
                 ],
               ),
             ),
