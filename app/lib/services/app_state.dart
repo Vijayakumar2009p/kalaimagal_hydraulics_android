@@ -941,7 +941,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final profileSet = await _setProfilePicture(a, partnerId);
     if (a.payload['notePosted'] == true) return;
     try {
-      final attachments = await _uploadPhotos(a, 'Customer photo');
+      final attachments = await _uploadPhotos(a, 'Customer photo', skipProfile: profileSet);
       final extra = StringBuffer();
       if (attachments.isNotEmpty) {
         extra.write(attachments.length == 1 ? ' Photo attached.' : ' ${attachments.length} photos attached.');
@@ -969,14 +969,17 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     a.partnerId = partnerId;
     final profileSet = await _setProfilePicture(a, partnerId);
     if (a.payload['notePosted'] == true) return;
-    final attachments = await _uploadPhotos(a, 'Site photo');
+    final attachments = await _uploadPhotos(a, 'Site photo', skipProfile: profileSet);
     if (attachments.isEmpty && !profileSet) return; // photo files gone: nothing to send
     final n = attachments.length;
+    final parts = [
+      if (n > 0) n == 1 ? '1 photo attached.' : '$n photos attached.',
+      if (profileSet) 'Profile picture updated.',
+    ];
     await _postNote(
       partnerId,
-      'Photos added with VeeVee Field Locator by ${_by(a)} on ${formatDateTime(a.createdAt)}. '
-      '${n == 1 ? '1 photo attached.' : '$n photos attached.'}'
-      '${profileSet ? ' Profile picture updated.' : ''}',
+      '${n > 0 ? 'Photos added' : 'Profile picture changed'} with VeeVee Field Locator by '
+      '${_by(a)} on ${formatDateTime(a.createdAt)}. ${parts.join(' ')}',
       attachmentIds: attachments,
     );
     a.payload['notePosted'] = true;
@@ -1013,10 +1016,14 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Uploads every photo file still on the phone; returns attachment ids.
-  Future<List<int>> _uploadPhotos(PendingAction a, String title) async {
+  /// The profile picture is left out when it was set (it is already the
+  /// contact's picture, so it is not repeated in the log note).
+  Future<List<int>> _uploadPhotos(PendingAction a, String title, {bool skipProfile = false}) async {
+    final all = photosOf(a.payload);
+    final profile = skipProfile ? (a.payload['profile'] as int?) ?? 0 : -1;
     final photos = [
-      for (final p in photosOf(a.payload))
-        if (await File(p).exists()) p,
+      for (var i = 0; i < all.length; i++)
+        if (i != profile && await File(all[i]).exists()) all[i],
     ];
     final ids = <int>[];
     for (var i = 0; i < photos.length; i++) {

@@ -67,7 +67,7 @@ Do **not** switch on two-factor authentication for this login; the app cannot us
 | `image_1920` | profile picture, from the photo starred in the app |
 | Chatter (log note) | "Location set on site with VeeVee Field Locator by Ravi on 05-11-2026, 10:42. Lat …, Long …. GPS accuracy 8 m." |
 
-New customers are created with: name, company/individual, phone, email, GSTIN (companies only), address and (for individuals) the company they work at. **Add contact** (under Mobile) adds any number of contact persons with name and mobile; each is created in Odoo as a contact under the new customer (company or individual). Up to 5 optional photos (camera or gallery) are attached to the "Customer created…" log note in the contact's chatter; the starred one (the first by default) becomes the contact's profile picture. On an existing customer, **Add photos** does the same (profile picture only if switched on). The profile picture needs module version 19.0.1.0.2 or newer.
+New customers are created with: name, company/individual, phone, email, GSTIN (companies only), address and (for individuals) the company they work at. **Add contact** (under Mobile) adds any number of contact persons with name and mobile; each is created in Odoo as a contact under the new customer (company or individual). Up to 5 optional photos (camera or gallery) are attached to the "Customer created…" log note in the contact's chatter; the starred one (the first by default) becomes the contact's profile picture and is not repeated in the log note. On an existing customer, **Add photos** does the same (profile picture only if switched on). The profile picture needs module version 19.0.1.0.2 or newer.
 
 Note: Odoo 19 has no separate *Mobile* field on contacts, so the mobile number is saved in **Phone**. If a module adds a `mobile` field, the app uses it automatically.
 
@@ -172,7 +172,7 @@ Phones show "New version available" after their next login or app start.
 
 - [ ] Page 1 server URL → Find → page 2 database → page 3 login with the field login
 - [ ] New individual → no GSTIN field; New company → GSTIN shown
-- [ ] New customer with 3 photos, star the 2nd → Odoo picture = 2nd photo, log note has 3 photos
+- [ ] New customer with 3 photos, star the 2nd → Odoo picture = 2nd photo, log note has the other 2 photos
 - [ ] Existing customer → Add photos → photos in log note
 - [ ] New customer → Add contact (name + mobile) for a company and for an individual → both appear in Odoo under the customer's Contacts tab
 - [ ] Enter your name; customer list loads; search by name, mobile, GSTIN, city

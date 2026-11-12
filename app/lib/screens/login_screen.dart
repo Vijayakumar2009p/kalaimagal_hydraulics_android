@@ -261,6 +261,19 @@ class _LoginScreenState extends State<LoginScreen> {
     ],
   );
 
+  Widget _previousButton() => Padding(
+    padding: const EdgeInsets.only(top: 12),
+    child: SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(minimumSize: const Size(64, 52)),
+        onPressed: _busy ? null : _back,
+        icon: const Icon(Icons.arrow_back),
+        label: const Text('Previous', style: TextStyle(fontSize: 16)),
+      ),
+    ),
+  );
+
   Widget _nextButton(String label, VoidCallback onPressed) => SizedBox(
     width: double.infinity,
     child: FilledButton(
@@ -359,6 +372,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
         const SizedBox(height: 16),
         _nextButton('Next', _chooseDatabase),
+        _previousButton(),
       ],
     ),
   );
@@ -436,6 +450,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           const SizedBox(height: 16),
           _nextButton('Log in', _logIn),
+          _previousButton(),
         ],
       ),
     );
