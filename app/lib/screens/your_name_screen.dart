@@ -47,17 +47,11 @@ class _YourNameScreenState extends State<YourNameScreen> {
                 Container(
                   width: 56,
                   height: 56,
-                  decoration: BoxDecoration(
-                    color: VV.blueSoft,
-                    borderRadius: BorderRadius.circular(VV.radiusMd),
-                  ),
+                  decoration: BoxDecoration(color: VV.blueSoft, borderRadius: BorderRadius.circular(VV.radiusMd)),
                   child: const Icon(Icons.person_outline, color: VV.blue, size: 28),
                 ),
                 const SizedBox(height: 24),
-                const Text(
-                  'Who is using this phone?',
-                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700),
-                ),
+                const Text('Who is using this phone?', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
                 const Text(
                   'Everyone shares one Odoo login, so your name is added to the Odoo note '

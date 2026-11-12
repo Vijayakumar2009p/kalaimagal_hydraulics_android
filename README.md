@@ -20,7 +20,7 @@ Applies to: **Odoo 19** (Enterprise or Community: the geolocation fields come fr
 2. Find the PC's address: `hostname -I` (e.g. `192.168.1.10`). Allow the port: `sudo ufw allow 8069/tcp`.
 3. On the phone (same Wi-Fi), open `http://192.168.1.10:8069` in Chrome to be sure it loads.
 4. Build a **debug** APK (`flutter build apk --debug`) or run over USB (`flutter run`). Only debug builds allow `http://`.
-5. In the app: **Advanced settings → Odoo server URL** = `http://192.168.1.10:8069`, tap **Find** for the database.
+5. In the app, page 1 **Odoo server**: type `http://192.168.1.10:8069` and tap **Find**; page 2: choose the database; page 3: login and password.
 
 `localhost` does not work from the phone: on the phone, "localhost" is the phone itself.
 
@@ -66,7 +66,7 @@ Do **not** switch on two-factor authentication for this login; the app cannot us
 | `vv_gps_captured`, `vv_gps_accuracy`, `vv_gps_by` | (module, stored but not shown) GPS capture, accuracy, person |
 | Chatter (log note) | "Location set on site with VeeVee Field Locator by Ravi on 05-11-2026, 10:42. Lat …, Long …. GPS accuracy 8 m." |
 
-New customers are created with: name, company/individual, phone, email, GSTIN, address and (for individuals) the company they work at. An optional photo (camera or gallery) is attached to the "Customer created…" log note in the contact's chatter.
+New customers are created with: name, company/individual, phone, email, GSTIN, address and (for individuals) the company they work at. **Add contact** (under Mobile) adds any number of contact persons with name and mobile; each is created in Odoo as a contact under the new customer (company or individual). An optional photo (camera or gallery) is attached to the "Customer created…" log note in the contact's chatter.
 
 Note: Odoo 19 has no separate *Mobile* field on contacts, so the mobile number is saved in **Phone**. If a module adds a `mobile` field, the app uses it automatically.
 
@@ -81,7 +81,7 @@ static const String defaultServerUrl = 'https://www.veeveeinfotech.com';
 static const String defaultDatabase = '';   // put your database name here
 ```
 
-The database list is fetched automatically when the server allows it. If your server hides it (common), the name typed here is used, so staff only enter login and password. Both can still be changed under **Advanced settings** on the login screen.
+The database list is fetched automatically when the server allows it. If your server hides it (common), the name typed here is used, so staff only enter login and password. The login is three pages: **1. Odoo server** (URL, then *Find*) → **2. Database** (pick from the list, or type the name if the server hides it) → **3. Login** (login and password).
 
 Other settings in the same file: GPS accuracy needed (20 m), "Save anyway" wait (45 s), sync interval.
 
@@ -157,7 +157,7 @@ Phones show "New version available" after their next login or app start.
 
 ## 5. How the app works
 
-- **Login**: username/password over Odoo's standard web session (`/web/session/authenticate`). With *Keep me logged in*, the password is kept in Android's encrypted storage so the app can log in again by itself when the Odoo session expires.
+- **Login**: three pages (server → database → login and password). Username/password over Odoo's standard web session (`/web/session/authenticate`). With *Keep me logged in*, the password is kept in Android's encrypted storage so the app can log in again by itself when the Odoo session expires.
 - **Your name**: asked once per phone. Everyone shares one Odoo login, so this name goes into each chatter note.
 - **Customers**: all contacts (companies and individuals, except your own staff users and invoice/delivery addresses) are downloaded to the phone, so search works offline. One search box matches name, mobile, GSTIN and city.
 - **Set location**: after location permission is allowed, the app takes the phone's current location by itself. The **Save location** button is ready as soon as the first reading arrives; GPS keeps improving the reading in the background until Save is tapped. *Find again* takes a fresh reading. Fake-GPS apps are blocked. The customer's address is not changed.
@@ -169,7 +169,8 @@ Phones show "New version available" after their next login or app start.
 
 ## 6. Test checklist (first phone)
 
-- [ ] Login with the field login; database found or pre-filled
+- [ ] Page 1 server URL → Find → page 2 database → page 3 login with the field login
+- [ ] New customer → Add contact (name + mobile) for a company and for an individual → both appear in Odoo under the customer's Contacts tab
 - [ ] Enter your name; customer list loads; search by name, mobile, GSTIN, city
 - [ ] Open a customer → Set location → location is taken by itself → Save location → Odoo contact shows Lat/Long in Partner Assignment, plus a chatter note
 - [ ] Set location again for the same customer → "Replace saved location?" appears
@@ -187,7 +188,7 @@ Phones show "New version available" after their next login or app start.
 |---|---|
 | "Wrong login or password." | Check login/password in Odoo Users |
 | "This Odoo user has two-factor authentication…" | Turn off 2FA for the field login |
-| "Database … was not found" | Correct the database name under Advanced settings |
+| "Database … was not found" | Go back to page 2 and choose or type the correct database |
 | "This address is not an Odoo server (404)" | Use the base address, e.g. `https://www.veeveeinfotech.com` |
 | "This login can only set customer locations…" | Expected for the shared login; change other details in Odoo |
 | "Fake GPS detected" | Developer options → Select mock location app → Nothing |

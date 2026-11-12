@@ -26,6 +26,7 @@ class NewCustomerInput {
     this.zip = '',
     this.parent,
     this.photoPath,
+    this.contacts = const [],
   });
 
   final String name;
@@ -40,6 +41,16 @@ class NewCustomerInput {
 
   /// Optional photo (camera or gallery), attached to the "created" log note.
   final String? photoPath;
+
+  /// Contact persons of a new company ("Add contact"); created under it.
+  final List<ContactInput> contacts;
+}
+
+/// A contact person added on the "New customer" screen.
+class ContactInput {
+  const ContactInput({required this.name, this.phone = ''});
+  final String name;
+  final String phone;
 }
 
 /// A location captured on the "Set location" screen.
@@ -340,12 +351,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Calls Odoo; logs in again by itself when the session has ended.
-  Future<dynamic> _call(
-    String model,
-    String method,
-    List<dynamic> args, {
-    Map<String, dynamic>? kwargs,
-  }) async {
+  Future<dynamic> _call(String model, String method, List<dynamic> args, {Map<String, dynamic>? kwargs}) async {
     final client = _client ??= OdooClient(serverUrl);
     final kw = <String, dynamic>{...?kwargs};
     kw['context'] = {...userContext, ...?(kwargs?['context'] as Map<String, dynamic>?)};
@@ -380,10 +386,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     } on OdooException catch (e) {
       if (e.isAccessDenied) {
         _markNeedsLogin();
-        throw OdooException(
-          'The saved password no longer works. Please log in again.',
-          name: 'SessionExpired',
-        );
+        throw OdooException('The saved password no longer works. Please log in again.', name: 'SessionExpired');
       }
       rethrow;
     }
@@ -469,9 +472,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       // was running (the downloaded pages may not include them yet).
       final freshIds = fresh.map((c) => c.id).toSet();
       fresh.addAll(
-        customers.where(
-          (c) => c.isLocal || (!freshIds.contains(c.id) && (_linkedAt[c.id]?.isAfter(started) ?? false)),
-        ),
+        customers.where((c) => c.isLocal || (!freshIds.contains(c.id) && (_linkedAt[c.id]?.isAfter(started) ?? false))),
       );
       customers = fresh;
       _applyPendingToCustomers();
@@ -617,6 +618,43 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       pending: true,
     );
     customers.insert(0, customer);
+    // Extra contact persons (company or individual): each one is created
+    // under the new customer once it is in Odoo.
+    for (final person in input.contacts.where((p) => p.name.trim().isNotEmpty)) {
+      final personRef = _newRef();
+      final personPhone = person.phone.trim().isEmpty ? '' : Validators.formatMobile(person.phone);
+      queue.add(
+        PendingAction(
+          ref: personRef,
+          kind: PendingAction.create,
+          createdAt: DateTime.now(),
+          customerName: '${person.name.trim()} (${input.name.trim()})',
+          payload: {
+            'vals': <String, dynamic>{
+              'name': person.name.trim(),
+              'is_company': false,
+              'type': 'contact',
+              if (personPhone.isNotEmpty) phoneField: personPhone,
+              if (partnerFields.contains('customer_rank')) 'customer_rank': 1,
+            },
+            'parentRef': ref,
+            'userName': userName,
+          },
+        ),
+      );
+      customers.insert(
+        1,
+        Customer(
+          id: _nextLocalId--,
+          localRef: personRef,
+          name: person.name.trim(),
+          parentName: input.name.trim(),
+          phone: personPhone,
+          city: input.city.trim(),
+          pending: true,
+        ),
+      );
+    }
     await _saveQueue();
     await _saveCustomers();
     await _saveSettings();
@@ -960,9 +998,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       for (final f in ['street', 'street2', 'city', 'zip']) {
         vals[f] = (addr[f] ?? '').toString();
       }
-      vals.addAll(
-        await _stateAndCountry((addr['state'] ?? '').toString(), (addr['countryCode'] ?? '').toString()),
-      );
+      vals.addAll(await _stateAndCountry((addr['state'] ?? '').toString(), (addr['countryCode'] ?? '').toString()));
     }
     await _call('res.partner', 'write', [
       [partnerId],
@@ -971,8 +1007,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
     final photo = p['photo'] as String?;
     final attachments = <int>[
-      if (photo != null && photo.isNotEmpty)
-        await _uploadPhoto(photo, 'Site photo ${formatDate(captured)}.jpg'),
+      if (photo != null && photo.isNotEmpty) await _uploadPhoto(photo, 'Site photo ${formatDate(captured)}.jpg'),
     ];
 
     final moved = (p['pinMoved'] as num? ?? 0).toDouble();

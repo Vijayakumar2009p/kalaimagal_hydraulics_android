@@ -24,10 +24,7 @@ class SplashScreen extends StatelessWidget {
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: VV.ink),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Pin customer locations to Odoo',
-                style: TextStyle(fontSize: 16, color: VV.inkMuted),
-              ),
+              const Text('Pin customer locations to Odoo', style: TextStyle(fontSize: 16, color: VV.inkMuted)),
               const SizedBox(height: 32),
               if (error == null)
                 const SizedBox(
@@ -44,10 +41,7 @@ class SplashScreen extends StatelessWidget {
               const Spacer(),
               Image.asset('assets/images/logo_lockup.png', width: 180),
               const SizedBox(height: 12),
-              const Text(
-                'Version ${AppConfig.appVersion}',
-                style: TextStyle(fontSize: 12, color: VV.inkMuted),
-              ),
+              const Text('Version ${AppConfig.appVersion}', style: TextStyle(fontSize: 12, color: VV.inkMuted)),
             ],
           ),
         ),

@@ -143,9 +143,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 text: 'Your Odoo session ended. Tap to log in again.',
                 icon: Icons.lock_outline,
                 tone: Tone.danger,
-                onTap: () => Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const LoginScreen(relogin: true))),
+                onTap: () =>
+                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LoginScreen(relogin: true))),
               )
             else if (!app.online)
               InfoStrip(
@@ -162,8 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     'refused by Odoo. Tap to check.',
                 icon: Icons.error_outline,
                 tone: Tone.danger,
-                onTap: () =>
-                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
               ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -241,8 +239,7 @@ class _HomeScreenState extends State<HomeScreen> {
           foregroundColor: Colors.white,
           icon: const Icon(Icons.add),
           label: const Text('New customer', style: TextStyle(fontWeight: FontWeight.w600)),
-          onPressed: () =>
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NewCustomerScreen())),
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NewCustomerScreen())),
         ),
       ),
     );
@@ -305,8 +302,7 @@ class _CustomerRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () =>
-          Navigator.of(context).push(MaterialPageRoute(builder: (_) => CustomerScreen(customer: customer))),
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CustomerScreen(customer: customer))),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(

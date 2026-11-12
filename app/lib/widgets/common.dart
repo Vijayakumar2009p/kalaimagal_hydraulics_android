@@ -212,12 +212,7 @@ class SectionLabel extends StatelessWidget {
     padding: const EdgeInsets.only(bottom: 8),
     child: Text(
       text.toUpperCase(),
-      style: const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.5,
-        color: VV.inkMuted,
-      ),
+      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: VV.inkMuted),
     ),
   );
 }
@@ -261,24 +256,14 @@ class InfoTable extends StatelessWidget {
                             children: [
                               Text(
                                 visible[i].$1,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: VV.inkMuted,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                                style: const TextStyle(fontSize: 12, color: VV.inkMuted, fontWeight: FontWeight.w500),
                               ),
                               const SizedBox(height: 2),
-                              SelectableText(
-                                visible[i].$2,
-                                style: const TextStyle(fontSize: 16, height: 1.4),
-                              ),
+                              SelectableText(visible[i].$2, style: const TextStyle(fontSize: 16, height: 1.4)),
                             ],
                           ),
                         ),
-                        if (actions[visible[i].$1] != null) ...[
-                          const SizedBox(width: 12),
-                          actions[visible[i].$1]!,
-                        ],
+                        if (actions[visible[i].$1] != null) ...[const SizedBox(width: 12), actions[visible[i].$1]!],
                       ],
                     )
                   : Row(

@@ -62,10 +62,7 @@ class AppDrawer extends StatelessWidget {
                   children: [
                     Container(
                       padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(VV.radiusMd),
-                      ),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(VV.radiusMd)),
                       child: Image.asset('assets/images/logo_mark.png', width: 32, height: 29),
                     ),
                     const SizedBox(width: 12),
@@ -142,11 +139,7 @@ class AppDrawer extends StatelessWidget {
                     onShowWaiting();
                   },
                 ),
-                _item(
-                  Icons.person_add_alt_1_outlined,
-                  'New customer',
-                  onTap: () => open(const NewCustomerScreen()),
-                ),
+                _item(Icons.person_add_alt_1_outlined, 'New customer', onTap: () => open(const NewCustomerScreen())),
                 _item(
                   Icons.sync,
                   'Sync now',
@@ -166,11 +159,7 @@ class AppDrawer extends StatelessWidget {
                   },
                 ),
                 const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider()),
-                _item(
-                  Icons.badge_outlined,
-                  'Change your name',
-                  onTap: () => open(const YourNameScreen(editing: true)),
-                ),
+                _item(Icons.badge_outlined, 'Change your name', onTap: () => open(const YourNameScreen(editing: true))),
                 _item(Icons.settings_outlined, 'Settings', onTap: () => open(const SettingsScreen())),
                 _item(
                   Icons.system_update_outlined,
@@ -184,8 +173,7 @@ class AppDrawer extends StatelessWidget {
                   Icons.support_agent_outlined,
                   'Help & support',
                   subtitle: 'Call ${AppConfig.supportPhone}',
-                  onTap: () =>
-                      launchUrl(Uri(scheme: 'tel', path: AppConfig.supportPhone.replaceAll(' ', ''))),
+                  onTap: () => launchUrl(Uri(scheme: 'tel', path: AppConfig.supportPhone.replaceAll(' ', ''))),
                 ),
                 _item(
                   Icons.info_outline,

@@ -311,10 +311,7 @@ class _SetLocationScreenState extends State<SetLocationScreen> {
               Center(
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: VV.goldSoft,
-                    borderRadius: BorderRadius.circular(VV.radiusMd),
-                  ),
+                  decoration: BoxDecoration(color: VV.goldSoft, borderRadius: BorderRadius.circular(VV.radiusMd)),
                   child: const Text(
                     'Not saved yet. Tap the blue button below.',
                     textAlign: TextAlign.center,
@@ -334,16 +331,9 @@ class _SetLocationScreenState extends State<SetLocationScreen> {
                 const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: VV.blue),
-                    ),
+                    SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: VV.blue)),
                     SizedBox(width: 8),
-                    Text(
-                      'Improving accuracy… you can save now',
-                      style: TextStyle(fontSize: 13, color: VV.inkMuted),
-                    ),
+                    Text('Improving accuracy… you can save now', style: TextStyle(fontSize: 13, color: VV.inkMuted)),
                   ],
                 ),
               ],
@@ -441,12 +431,7 @@ class _Steps extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         step('1', 'Find location', done: true),
-        Container(
-          width: 64,
-          height: 2,
-          margin: const EdgeInsets.only(top: 17, left: 8, right: 8),
-          color: VV.line,
-        ),
+        Container(width: 64, height: 2, margin: const EdgeInsets.only(top: 17, left: 8, right: 8), color: VV.line),
         step('2', 'Save', done: false),
       ],
     );
@@ -464,10 +449,8 @@ class _Pulse extends StatefulWidget {
 }
 
 class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 900),
-  )..repeat(reverse: true);
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
+    ..repeat(reverse: true);
 
   @override
   void dispose() {

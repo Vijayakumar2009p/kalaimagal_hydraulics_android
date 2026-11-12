@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../app_scope.dart';
@@ -8,8 +6,10 @@ import '../services/odoo_client.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
-/// Login. With [relogin] it is pushed over the app when the session ended,
-/// and closes itself after a successful login.
+/// Login in three pages: 1 server URL → 2 database → 3 login and password.
+///
+/// With [relogin] it is pushed over the app when the session ended: it opens
+/// on page 3 with the saved server and database, and closes after login.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, this.relogin = false});
   final bool relogin;
@@ -18,114 +18,115 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-enum _DbStatus { idle, loading, found, hidden, failed }
+enum _Step { server, database, login }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _form = GlobalKey<FormState>();
+  final _serverForm = GlobalKey<FormState>();
+  final _dbForm = GlobalKey<FormState>();
+  final _loginForm = GlobalKey<FormState>();
+
   late final TextEditingController _url;
-  late final TextEditingController _db;
+  late final TextEditingController _dbName;
   late final TextEditingController _user;
   final _password = TextEditingController();
 
+  _Step _step = _Step.server;
+  List<String> _databases = [];
+  bool _dbListHidden = false;
+  String? _selectedDb;
+
   bool _showPassword = false;
   bool _remember = true;
-  bool _advanced = false;
   bool _busy = false;
   String? _error;
-
-  List<String> _databases = [];
-  _DbStatus _dbStatus = _DbStatus.idle;
-  String _dbMessage = '';
-  Timer? _debounce;
-  int _dbRequest = 0;
 
   @override
   void initState() {
     super.initState();
     final app = AppScope.read(context);
     _url = TextEditingController(text: app.serverUrl);
-    _db = TextEditingController(text: app.database);
+    final savedDb = app.database.isNotEmpty ? app.database : AppConfig.defaultDatabase;
+    _dbName = TextEditingController(text: savedDb);
     _user = TextEditingController(text: app.login);
     _remember = app.rememberMe;
-    Future.microtask(_fetchDatabases); // after the first build (it calls setState)
+    if (widget.relogin && app.database.isNotEmpty) {
+      _selectedDb = app.database;
+      _step = _Step.login;
+    }
   }
 
   @override
   void dispose() {
-    _debounce?.cancel();
     _url.dispose();
-    _db.dispose();
+    _dbName.dispose();
     _user.dispose();
     _password.dispose();
     super.dispose();
   }
 
-  void _urlChanged(String _) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 900), _fetchDatabases);
-  }
+  String get _database => _dbListHidden ? _dbName.text.trim() : (_selectedDb ?? '');
 
-  Future<void> _fetchDatabases() async {
-    final url = OdooClient.normalizeUrl(_url.text);
-    if (url.isEmpty) return;
-    final request = ++_dbRequest;
-    setState(() {
-      _dbStatus = _DbStatus.loading;
-      _dbMessage = 'Looking for databases…';
-    });
-    try {
-      final list = await AppScope.read(context).listDatabases(url);
-      if (!mounted || request != _dbRequest) return;
-      setState(() {
-        _databases = list;
-        if (list.isEmpty) {
-          _dbStatus = _DbStatus.hidden;
-          _dbMessage = 'No database list on this server. Type the database name.';
-        } else {
-          _dbStatus = _DbStatus.found;
-          _dbMessage = list.length == 1
-              ? 'Found 1 database on this server'
-              : 'Found ${list.length} databases on this server';
-          if (!list.contains(_db.text)) _db.text = list.first;
-        }
-      });
-    } on OdooNetworkException catch (e) {
-      if (!mounted || request != _dbRequest) return;
-      setState(() {
-        _databases = [];
-        _dbStatus = _DbStatus.failed;
-        _dbMessage = e.message;
-      });
-    } catch (_) {
-      if (!mounted || request != _dbRequest) return;
-      setState(() {
-        _databases = [];
-        _dbStatus = _DbStatus.hidden;
-        _dbMessage = 'This server hides its database list. Type the database name.';
-      });
-    }
-    if (_db.text.trim().isEmpty && _dbStatus != _DbStatus.found) {
-      setState(() => _advanced = true);
-    }
-  }
+  void _go(_Step step) => setState(() {
+    _step = step;
+    _error = null;
+  });
 
-  Future<void> _submit() async {
+  // ---- page 1: server ----
+  Future<void> _findServer() async {
     FocusScope.of(context).unfocus();
-    if (!_form.currentState!.validate()) return;
-    if (_db.text.trim().isEmpty) {
-      // The database field may be hidden under Advanced settings.
-      setState(() {
-        _advanced = true;
-        _error = 'Enter the database name under Advanced settings.';
-      });
+    if (!_serverForm.currentState!.validate()) return;
+    final url = OdooClient.normalizeUrl(_url.text);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final app = AppScope.read(context);
+    try {
+      final list = await app.listDatabases(url);
+      if (!mounted) return;
+      _databases = list;
+      _dbListHidden = list.isEmpty;
+    } on OdooNetworkException catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = '${e.message}\n\nCheck the address and that the phone has internet or is on the same Wi-Fi.';
+        });
+      }
+      return;
+    } catch (_) {
+      // The server answered but hides its database list: type the name.
+      _databases = [];
+      _dbListHidden = true;
+    }
+    if (!mounted) return;
+    _url.text = url;
+    final previous = _selectedDb ?? app.database;
+    _selectedDb = _databases.contains(previous) ? previous : (_databases.length == 1 ? _databases.first : null);
+    setState(() => _busy = false);
+    _go(_Step.database);
+  }
+
+  // ---- page 2: database ----
+  void _chooseDatabase() {
+    if (_dbListHidden) {
+      if (!_dbForm.currentState!.validate()) return;
+    } else if (_selectedDb == null) {
+      setState(() => _error = 'Choose a database.');
       return;
     }
+    _go(_Step.login);
+  }
+
+  // ---- page 3: login ----
+  Future<void> _logIn() async {
+    FocusScope.of(context).unfocus();
+    if (!_loginForm.currentState!.validate()) return;
     final app = AppScope.read(context);
+    final url = OdooClient.normalizeUrl(_url.text);
+    final db = _database;
     final changingServer =
-        app.queue.isNotEmpty &&
-        (OdooClient.normalizeUrl(_url.text) != app.serverUrl ||
-            _db.text.trim() != app.database ||
-            _user.text.trim() != app.login);
+        app.queue.isNotEmpty && (url != app.serverUrl || db != app.database || _user.text.trim() != app.login);
     if (changingServer) {
       final ok = await showDialog<bool>(
         context: context,
@@ -141,20 +142,14 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
       );
-      if (ok != true) return;
+      if (ok != true || !mounted) return;
     }
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      await app.logIn(
-        url: _url.text,
-        db: _db.text.trim(),
-        user: _user.text.trim(),
-        password: _password.text,
-        remember: _remember,
-      );
+      await app.logIn(url: url, db: db, user: _user.text.trim(), password: _password.text, remember: _remember);
       if (mounted && widget.relogin) Navigator.of(context).pop();
     } on OdooNetworkException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -164,7 +159,7 @@ class _LoginScreenState extends State<LoginScreen> {
         () => _error = e.isAccessDenied
             ? 'Wrong login or password.'
             : (e.message.contains('Database not found') || e.message.contains('does not exist'))
-            ? 'Database "${_db.text.trim()}" was not found on this server.'
+            ? 'Database "$db" was not found on this server. Go back and choose another.'
             : e.message,
       );
     } catch (e) {
@@ -174,85 +169,60 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // ---------------------------------------------------------------------
+
+  void _back() {
+    if (_busy) return;
+    switch (_step) {
+      case _Step.login:
+        // Opened straight on page 3 ("Log in again"): no list loaded yet.
+        _go(_databases.isEmpty && !_dbListHidden ? _Step.server : _Step.database);
+      case _Step.database:
+        _go(_Step.server);
+      case _Step.server:
+        if (widget.relogin) Navigator.of(context).pop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: widget.relogin ? AppBar(title: const Text('Log in again')) : null,
-      body: SafeArea(
-        child: Form(
-          key: _form,
+    final canLeave = _step == _Step.server;
+    return PopScope(
+      canPop: canLeave,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _back();
+      },
+      child: Scaffold(
+        appBar: (_step != _Step.server || widget.relogin)
+            ? AppBar(
+                leading: IconButton(
+                  tooltip: 'Back',
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: _step == _Step.server ? () => Navigator.of(context).pop() : _back,
+                ),
+                title: Text(widget.relogin ? 'Log in again' : 'Log in'),
+              )
+            : null,
+        body: SafeArea(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
             children: [
-              if (!widget.relogin) ...[
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Image.asset('assets/images/logo_lockup.png', width: 150),
-                ),
+              if (_step == _Step.server && !widget.relogin) ...[
+                Align(alignment: Alignment.centerLeft, child: Image.asset('assets/images/logo_lockup.png', width: 150)),
                 const SizedBox(height: 24),
               ],
-              const Text('Log in to Odoo', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              const Text(
-                'Use the field login given by your office.',
-                style: TextStyle(fontSize: 14, color: VV.inkMuted),
-              ),
+              _StepBar(current: _step.index),
               const SizedBox(height: 24),
-              const FieldLabel('Login (email)'),
-              TextFormField(
-                controller: _user,
-                keyboardType: TextInputType.emailAddress,
-                autocorrect: false,
-                textInputAction: TextInputAction.next,
-                autofillHints: const [AutofillHints.username],
-                validator: (v) => (v ?? '').trim().isEmpty ? 'Enter your login.' : null,
-              ),
-              const SizedBox(height: 16),
-              const FieldLabel('Password'),
-              TextFormField(
-                controller: _password,
-                obscureText: !_showPassword,
-                autocorrect: false,
-                enableSuggestions: false,
-                textInputAction: TextInputAction.done,
-                autofillHints: const [AutofillHints.password],
-                onFieldSubmitted: (_) => _submit(),
-                validator: (v) => (v ?? '').isEmpty ? 'Enter your password.' : null,
-                decoration: InputDecoration(
-                  suffixIcon: IconButton(
-                    tooltip: _showPassword ? 'Hide password' : 'Show password',
-                    icon: Icon(_showPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                    onPressed: () => setState(() => _showPassword = !_showPassword),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              CheckboxListTile(
-                value: _remember,
-                onChanged: (v) => setState(() => _remember = v ?? true),
-                title: const Text('Keep me logged in', style: TextStyle(fontSize: 14)),
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-              ),
-              const SizedBox(height: 8),
-              _advancedPanel(),
+              switch (_step) {
+                _Step.server => _serverPage(),
+                _Step.database => _databasePage(),
+                _Step.login => _loginPage(),
+              },
               if (_error != null) ...[
                 const SizedBox(height: 16),
                 Callout(_error!, tone: Tone.danger, icon: Icons.error_outline),
               ],
               const SizedBox(height: 24),
-              FilledButton(
-                onPressed: _busy ? null : _submit,
-                child: _busy
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-                      )
-                    : const Text('Log in'),
-              ),
-              const SizedBox(height: 12),
               const Center(
                 child: Text(
                   'Need help? Call ${AppConfig.supportPhone}',
@@ -266,105 +236,270 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _advancedPanel() {
-    return Container(
-      decoration: BoxDecoration(
-        color: VV.surfaceRaised,
-        border: Border.all(color: VV.line),
-        borderRadius: BorderRadius.circular(VV.radiusMd),
-      ),
+  Widget _title(String title, String subtitle) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(title, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 8),
+      Text(subtitle, style: const TextStyle(fontSize: 15, height: 1.4, color: VV.inkMuted)),
+      const SizedBox(height: 24),
+    ],
+  );
+
+  Widget _nextButton(String label, VoidCallback onPressed) => SizedBox(
+    width: double.infinity,
+    child: FilledButton(
+      style: FilledButton.styleFrom(minimumSize: const Size(64, 52)),
+      onPressed: _busy ? null : onPressed,
+      child: _busy
+          ? const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+            )
+          : Text(label, style: const TextStyle(fontSize: 16)),
+    ),
+  );
+
+  Widget _serverPage() => Form(
+    key: _serverForm,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _title('Odoo server', 'Enter the address of your Odoo, for example www.veeveeinfotech.com'),
+        const FieldLabel('Odoo server URL'),
+        TextFormField(
+          controller: _url,
+          keyboardType: TextInputType.url,
+          autocorrect: false,
+          textInputAction: TextInputAction.go,
+          onFieldSubmitted: (_) => _findServer(),
+          decoration: const InputDecoration(prefixIcon: Icon(Icons.dns_outlined)),
+          validator: (v) {
+            final u = Uri.tryParse(OdooClient.normalizeUrl(v ?? ''));
+            return (u == null || u.host.isEmpty) ? 'Enter the server address.' : null;
+          },
+        ),
+        const SizedBox(height: 24),
+        _nextButton('Next', _findServer),
+      ],
+    ),
+  );
+
+  Widget _databasePage() => Form(
+    key: _dbForm,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _title(
+          'Choose database',
+          _dbListHidden
+              ? 'This server hides its database list. Type the database name.'
+              : 'Server: ${Uri.tryParse(_url.text)?.host ?? _url.text}',
+        ),
+        if (_dbListHidden) ...[
+          const FieldLabel('Database name'),
+          TextFormField(
+            controller: _dbName,
+            autocorrect: false,
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => _chooseDatabase(),
+            decoration: const InputDecoration(prefixIcon: Icon(Icons.storage_outlined)),
+            validator: (v) => (v ?? '').trim().isEmpty ? 'Enter the database name.' : null,
+          ),
+        ] else
+          for (final db in _databases)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _ChoiceTile(
+                label: db,
+                selected: _selectedDb == db,
+                onTap: () => setState(() {
+                  _selectedDb = db;
+                  _error = null;
+                }),
+              ),
+            ),
+        const SizedBox(height: 16),
+        _nextButton('Next', _chooseDatabase),
+      ],
+    ),
+  );
+
+  Widget _loginPage() {
+    final host = Uri.tryParse(OdooClient.normalizeUrl(_url.text))?.host ?? _url.text;
+    return Form(
+      key: _loginForm,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          InkWell(
-            onTap: () => setState(() => _advanced = !_advanced),
-            borderRadius: BorderRadius.circular(VV.radiusMd),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Advanced settings',
-                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                    ),
+          _title('Log in', 'Use the field login given by your office.'),
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+            decoration: BoxDecoration(
+              color: VV.surfaceRaised,
+              border: Border.all(color: VV.line),
+              borderRadius: BorderRadius.circular(VV.radiusMd),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.dns_outlined, size: 20, color: VV.inkMuted),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '$host · $_database',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                   ),
-                  Icon(_advanced ? Icons.expand_less : Icons.expand_more),
-                ],
+                ),
+                TextButton(onPressed: _busy ? null : () => _go(_Step.server), child: const Text('Change')),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          const FieldLabel('Login (email)'),
+          TextFormField(
+            controller: _user,
+            keyboardType: TextInputType.emailAddress,
+            autocorrect: false,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.username],
+            decoration: const InputDecoration(prefixIcon: Icon(Icons.person_outline)),
+            validator: (v) => (v ?? '').trim().isEmpty ? 'Enter your login.' : null,
+          ),
+          const SizedBox(height: 16),
+          const FieldLabel('Password'),
+          TextFormField(
+            controller: _password,
+            obscureText: !_showPassword,
+            autocorrect: false,
+            enableSuggestions: false,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.password],
+            onFieldSubmitted: (_) => _logIn(),
+            validator: (v) => (v ?? '').isEmpty ? 'Enter your password.' : null,
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.lock_outline),
+              suffixIcon: IconButton(
+                tooltip: _showPassword ? 'Hide password' : 'Show password',
+                icon: Icon(_showPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                onPressed: () => setState(() => _showPassword = !_showPassword),
               ),
             ),
           ),
-          if (_advanced)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const FieldLabel('Odoo server URL'),
-                  TextFormField(
-                    controller: _url,
-                    keyboardType: TextInputType.url,
-                    autocorrect: false,
-                    onChanged: _urlChanged,
-                    validator: (v) {
-                      final u = Uri.tryParse(OdooClient.normalizeUrl(v ?? ''));
-                      return (u == null || u.host.isEmpty) ? 'Enter the server address.' : null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      const Expanded(child: FieldLabel('Database')),
-                      if (_dbStatus != _DbStatus.loading)
-                        TextButton.icon(
-                          onPressed: _fetchDatabases,
-                          icon: const Icon(Icons.refresh, size: 18),
-                          label: const Text('Find'),
-                        ),
-                    ],
-                  ),
-                  if (_dbStatus == _DbStatus.found && _databases.length > 1)
-                    DropdownButtonFormField<String>(
-                      initialValue: _databases.contains(_db.text) ? _db.text : _databases.first,
-                      items: [for (final d in _databases) DropdownMenuItem(value: d, child: Text(d))],
-                      onChanged: (v) => _db.text = v ?? '',
-                    )
-                  else
-                    TextFormField(
-                      controller: _db,
-                      autocorrect: false,
-                      readOnly: _dbStatus == _DbStatus.found,
-                      validator: (v) => (v ?? '').trim().isEmpty ? 'Enter the database name.' : null,
-                    ),
-                  const SizedBox(height: 6),
-                  _dbStatusLine(),
-                ],
-              ),
-            ),
+          const SizedBox(height: 8),
+          CheckboxListTile(
+            value: _remember,
+            onChanged: (v) => setState(() => _remember = v ?? true),
+            title: const Text('Keep me logged in', style: TextStyle(fontSize: 14)),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+          ),
+          const SizedBox(height: 16),
+          _nextButton('Log in', _logIn),
         ],
       ),
     );
   }
+}
 
-  Widget _dbStatusLine() {
-    final (IconData icon, Color color) = switch (_dbStatus) {
-      _DbStatus.found => (Icons.check, VV.success),
-      _DbStatus.failed => (Icons.cloud_off_outlined, VV.danger),
-      _DbStatus.loading => (Icons.hourglass_empty, VV.inkMuted),
-      _ => (Icons.info_outline, VV.inkMuted),
-    };
-    if (_dbMessage.isEmpty) return const SizedBox.shrink();
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 16, color: color),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Text(
-            _dbMessage,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: color),
+/// ① Server — ② Database — ③ Login
+class _StepBar extends StatelessWidget {
+  const _StepBar({required this.current});
+  final int current;
+
+  @override
+  Widget build(BuildContext context) {
+    const labels = ['Server', 'Database', 'Login'];
+    final children = <Widget>[];
+    for (var i = 0; i < labels.length; i++) {
+      final done = i < current;
+      final active = i == current;
+      children.add(
+        Column(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: done ? VV.success : (active ? VV.blue : VV.surfaceRaised),
+                border: Border.all(color: done ? VV.success : (active ? VV.blue : VV.line)),
+              ),
+              child: done
+                  ? const Icon(Icons.check, size: 18, color: Colors.white)
+                  : Text(
+                      '${i + 1}',
+                      style: TextStyle(fontWeight: FontWeight.w700, color: active ? Colors.white : VV.inkMuted),
+                    ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              labels[i],
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                color: active ? VV.blue : VV.inkMuted,
+              ),
+            ),
+          ],
+        ),
+      );
+      if (i < labels.length - 1) {
+        children.add(
+          Expanded(
+            child: Container(
+              height: 2,
+              margin: const EdgeInsets.only(top: 15, left: 6, right: 6),
+              color: done ? VV.success : VV.line,
+            ),
+          ),
+        );
+      }
+    }
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: children);
+  }
+}
+
+/// A large tappable option with a radio circle (database list).
+class _ChoiceTile extends StatelessWidget {
+  const _ChoiceTile({required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? VV.blueSoft : VV.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(VV.radiusMd),
+        side: BorderSide(color: selected ? VV.blue : VV.line, width: selected ? 2 : 1),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(VV.radiusMd),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(
+                selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                color: selected ? VV.blue : VV.inkMuted,
+              ),
+              const SizedBox(width: 12),
+              const Icon(Icons.storage_outlined, size: 20, color: VV.inkMuted),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }

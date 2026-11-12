@@ -35,13 +35,90 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
   Customer? _parent;
   bool _busy = false;
   String? _photoPath;
+  final List<_ContactRow> _contacts = [];
 
   @override
   void dispose() {
     for (final c in [_name, _mobile, _gstin, _email, _street, _city, _zip]) {
       c.dispose();
     }
+    for (final r in _contacts) {
+      r.dispose();
+    }
     super.dispose();
+  }
+
+  void _addContact() {
+    final row = _ContactRow();
+    setState(() => _contacts.add(row));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) row.focus.requestFocus();
+    });
+  }
+
+  void _removeContact(_ContactRow row) {
+    setState(() => _contacts.remove(row));
+    row.dispose();
+  }
+
+  Widget _contactCard(int index, _ContactRow row) {
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.fromLTRB(12, 4, 4, 12),
+      decoration: BoxDecoration(
+        border: Border.all(color: VV.inkMuted.withValues(alpha: 0.35)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.person_outline, size: 20, color: VV.inkMuted),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text('Contact ${index + 1}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+              ),
+              IconButton(
+                tooltip: 'Remove contact',
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () => _removeContact(row),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const FieldLabel('Name', required: true),
+                TextFormField(
+                  controller: row.name,
+                  focusNode: row.focus,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(hintText: 'Contact person name'),
+                  validator: (v) => (v ?? '').trim().isEmpty ? 'Enter the contact name, or remove this contact.' : null,
+                ),
+                const SizedBox(height: 12),
+                const FieldLabel('Mobile', optional: true),
+                TextFormField(
+                  controller: row.phone,
+                  keyboardType: TextInputType.phone,
+                  textInputAction: TextInputAction.next,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9 +\-]')),
+                    LengthLimitingTextInputFormatter(16),
+                  ],
+                  decoration: const InputDecoration(prefixText: '+91  ', hintText: '98765 43210'),
+                  validator: (v) => (v ?? '').trim().isEmpty ? null : Validators.mobileError(v!),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _save({required bool thenSetLocation}) async {
@@ -56,9 +133,7 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
         final choice = await _showDuplicates(dups);
         if (!mounted || choice == null) return;
         if (choice is Customer) {
-          Navigator.of(
-            context,
-          ).pushReplacement(MaterialPageRoute(builder: (_) => CustomerScreen(customer: choice)));
+          Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => CustomerScreen(customer: choice)));
           return;
         }
       }
@@ -74,6 +149,7 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
           zip: _zip.text,
           parent: _parent,
           photoPath: _photoPath,
+          contacts: [for (final r in _contacts) ContactInput(name: r.name.text, phone: r.phone.text)],
         ),
       );
       if (!mounted) return;
@@ -84,8 +160,7 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
       );
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) =>
-              thenSetLocation ? SetLocationScreen(customer: customer) : CustomerScreen(customer: customer),
+          builder: (_) => thenSetLocation ? SetLocationScreen(customer: customer) : CustomerScreen(customer: customer),
         ),
       );
     } catch (e) {
@@ -102,9 +177,7 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(VV.radiusLg)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(VV.radiusLg))),
       builder: (c) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -118,10 +191,7 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
                   Container(
                     width: 40,
                     height: 40,
-                    decoration: BoxDecoration(
-                      color: VV.goldSoft,
-                      borderRadius: BorderRadius.circular(VV.radiusMd),
-                    ),
+                    decoration: BoxDecoration(color: VV.goldSoft, borderRadius: BorderRadius.circular(VV.radiusMd)),
                     child: const Icon(Icons.warning_amber_rounded, color: VV.goldText),
                   ),
                   const SizedBox(width: 12),
@@ -222,10 +292,7 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.photo_library_outlined, color: VV.blue, size: 28),
-              title: const Text(
-                'Choose from gallery',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
+              title: const Text('Choose from gallery', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
               subtitle: const Text('Pick a photo already on this phone'),
               onTap: () => Navigator.pop(c, ImageSource.gallery),
             ),
@@ -236,12 +303,7 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
     );
     if (source == null) return;
     try {
-      final photo = await ImagePicker().pickImage(
-        source: source,
-        maxWidth: 1600,
-        maxHeight: 1600,
-        imageQuality: 70,
-      );
+      final photo = await ImagePicker().pickImage(source: source, maxWidth: 1600, maxHeight: 1600, imageQuality: 70);
       if (photo != null && mounted) setState(() => _photoPath = photo.path);
     } on PlatformException catch (e) {
       if (mounted) {
@@ -322,16 +384,8 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
                   children: [
                     SegmentedButton<bool>(
                       segments: const [
-                        ButtonSegment(
-                          value: true,
-                          label: Text('Company'),
-                          icon: Icon(Icons.apartment_outlined),
-                        ),
-                        ButtonSegment(
-                          value: false,
-                          label: Text('Individual'),
-                          icon: Icon(Icons.person_outline),
-                        ),
+                        ButtonSegment(value: true, label: Text('Company'), icon: Icon(Icons.apartment_outlined)),
+                        ButtonSegment(value: false, label: Text('Individual'), icon: Icon(Icons.person_outline)),
                       ],
                       selected: {_isCompany},
                       showSelectedIcon: false,
@@ -381,6 +435,16 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
                       decoration: const InputDecoration(prefixText: '+91  ', hintText: '98765 43210'),
                       validator: (v) => Validators.mobileError(v ?? ''),
                     ),
+                    for (var i = 0; i < _contacts.length; i++) _contactCard(i, _contacts[i]),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: _busy ? null : _addContact,
+                        icon: const Icon(Icons.person_add_alt_1),
+                        label: Text(_contacts.isEmpty ? 'Add contact' : 'Add another contact'),
+                      ),
+                    ),
                     const SizedBox(height: 16),
                     const FieldLabel('GSTIN', optional: true),
                     TextFormField(
@@ -406,11 +470,7 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
                             const SizedBox(width: 4),
                             Text(
                               'Valid GSTIN · $gstState (${_gstin.text.substring(0, 2)})',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: VV.success,
-                                fontWeight: FontWeight.w500,
-                              ),
+                              style: const TextStyle(fontSize: 12, color: VV.success, fontWeight: FontWeight.w500),
                             ),
                           ],
                         ),
@@ -548,10 +608,7 @@ class _CompanyPickerState extends State<_CompanyPicker> {
                 child: TextField(
                   autofocus: true,
                   onChanged: (v) => setState(() => _q = v),
-                  decoration: const InputDecoration(
-                    hintText: 'Search company',
-                    prefixIcon: Icon(Icons.search),
-                  ),
+                  decoration: const InputDecoration(hintText: 'Search company', prefixIcon: Icon(Icons.search)),
                 ),
               ),
               Expanded(
@@ -575,5 +632,18 @@ class _CompanyPickerState extends State<_CompanyPicker> {
         ),
       ),
     );
+  }
+}
+
+/// One extra contact person typed on the New customer page.
+class _ContactRow {
+  final name = TextEditingController();
+  final phone = TextEditingController();
+  final focus = FocusNode();
+
+  void dispose() {
+    name.dispose();
+    phone.dispose();
+    focus.dispose();
   }
 }

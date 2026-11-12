@@ -102,14 +102,10 @@ class CustomerScreen extends StatelessWidget {
                 width: double.infinity,
                 child: FilledButton.icon(
                   style: FilledButton.styleFrom(minimumSize: const Size(64, 52)),
-                  onPressed: () => Navigator.of(
-                    context,
-                  ).push(MaterialPageRoute(builder: (_) => SetLocationScreen(customer: c))),
+                  onPressed: () =>
+                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => SetLocationScreen(customer: c))),
                   icon: const Icon(Icons.my_location),
-                  label: Text(
-                    c.hasLocation ? 'Update location' : 'Set location',
-                    style: const TextStyle(fontSize: 16),
-                  ),
+                  label: Text(c.hasLocation ? 'Update location' : 'Set location', style: const TextStyle(fontSize: 16)),
                 ),
               ),
             ),

@@ -84,9 +84,8 @@ class SettingsScreen extends StatelessWidget {
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: VV.ink),
               ),
               trailing: TextButton(
-                onPressed: () => Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const YourNameScreen(editing: true))),
+                onPressed: () =>
+                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const YourNameScreen(editing: true))),
                 child: const Text('Change'),
               ),
             ),
@@ -201,10 +200,7 @@ class _PendingRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      action.customerName,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                    ),
+                    Text(action.customerName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                     Text(
                       '${action.label} · ${formatDateTime(action.createdAt)}',
                       style: const TextStyle(fontSize: 13, color: VV.inkMuted),
