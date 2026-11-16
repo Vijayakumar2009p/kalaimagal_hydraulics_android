@@ -201,7 +201,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         _chip('All', _Filter.all),
                         const SizedBox(width: 8),
-                        _chip('No location', _Filter.noLocation),
+                        _chip('Without location', _Filter.noLocation),
                         const SizedBox(width: 8),
                         _chip('Waiting to sync', _Filter.waiting),
                       ],
