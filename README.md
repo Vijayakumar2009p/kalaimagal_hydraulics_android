@@ -168,6 +168,28 @@ Build it yourself with:
 ORG_GRADLE_PROJECT_allowHttp=true flutter build apk --release --target-platform android-arm64 --dart-define=OWN_CONTACTS_ONLY=true --dart-define=ALLOW_HTTP=true --dart-define=SHARED_LOGIN=true
 ```
 
+### 3.6 Final APK for a customer (GitHub)
+
+**GitHub → Actions → "Build customer APK" → Run workflow**, fill in:
+
+| Field | Example |
+|---|---|
+| customer | `kalaimagal` (file name only) |
+| server_url | `http://189.72.144.148:8069` (built in; staff only pick the database and log in) |
+| database | empty = choose at login |
+| own_contacts_only | ticked = each login sees only the customers it created |
+| shared_login | ticked = all staff share one login (app asks each person's name) |
+
+The APK appears under the run's *Artifacts* as `field-locator-<customer>-<version>`. It needs the signing key secrets (3.7) and stops with an error without them.
+
+### 3.7 Signing key in GitHub (once)
+
+1. Create the key (section 3.2).
+2. `base64 -w0 ~/veevee-upload.jks > ~/veevee-upload.b64`
+3. GitHub → repository → **Settings → Secrets and variables → Actions → New repository secret**, add:
+   `KEYSTORE_BASE64` (contents of `veevee-upload.b64`), `KEYSTORE_PASSWORD`, `KEY_ALIAS` (`veevee`), `KEY_PASSWORD`.
+4. Back up `veevee-upload.jks` and the passwords in two safe places. Then delete `veevee-upload.b64`.
+
 ## 4. Releasing an update
 
 1. Raise the version in **both** `app/pubspec.yaml` (`version: 1.1.0+2`) and `app/lib/config.dart` (`appVersion = '1.1.0'`).

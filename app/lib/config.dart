@@ -7,12 +7,16 @@ class AppConfig {
   /// Must match `version:` in pubspec.yaml (the part before `+`).
   static const String appVersion = '1.1.0';
 
-  /// Pre-filled on the login screen (Advanced settings).
-  static const String defaultServerUrl = 'https://www.veeveeinfotech.com';
+  /// Pre-filled on login page 1. Customer builds set it with
+  /// `--dart-define=DEFAULT_SERVER=http://...`.
+  static const String defaultServerUrl = String.fromEnvironment(
+    'DEFAULT_SERVER',
+    defaultValue: 'https://www.veeveeinfotech.com',
+  );
 
   /// Pre-filled database name. Used when the server hides its database list.
   /// Replace with your real database name before building.
-  static const String defaultDatabase = '';
+  static const String defaultDatabase = String.fromEnvironment('DEFAULT_DATABASE');
 
   /// A location is "good" when GPS accuracy is this many metres or better.
   static const double goodAccuracyMeters = 20;
