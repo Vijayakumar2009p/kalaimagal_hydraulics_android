@@ -82,6 +82,12 @@ class OdooClient {
       throw OdooNetworkException('Connection problem: ${e.message}');
     } on FormatException {
       throw OdooNetworkException('The server sent an unreadable answer.');
+    } on StateError catch (e) {
+      // Android refuses plain http:// in this build ("Insecure HTTP is not allowed").
+      if (e.message.contains('Insecure HTTP')) {
+        throw OdooException('This app only connects to https:// servers. Use the https:// address of your Odoo.');
+      }
+      rethrow;
     }
 
     // Read the session cookie from the raw header (Dart's cookie parser is

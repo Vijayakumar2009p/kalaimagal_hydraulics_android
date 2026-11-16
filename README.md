@@ -154,7 +154,7 @@ GitHub builds a third file, **field-locator-TRIAL-apk** (about 10-12 MB), for cu
 Build it yourself with:
 
 ```bash
-ORG_GRADLE_PROJECT_allowHttp=true flutter build apk --release --target-platform android-arm64 --dart-define=OWN_CONTACTS_ONLY=true
+ORG_GRADLE_PROJECT_allowHttp=true flutter build apk --release --target-platform android-arm64 --dart-define=OWN_CONTACTS_ONLY=true --dart-define=ALLOW_HTTP=true
 ```
 
 ## 4. Releasing an update

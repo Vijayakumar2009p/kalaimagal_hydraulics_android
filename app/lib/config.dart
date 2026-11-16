@@ -5,7 +5,7 @@ class AppConfig {
   static const String appName = 'VeeVee Field Locator';
 
   /// Must match `version:` in pubspec.yaml (the part before `+`).
-  static const String appVersion = '1.0.8';
+  static const String appVersion = '1.0.9';
 
   /// Pre-filled on the login screen (Advanced settings).
   static const String defaultServerUrl = 'https://www.veeveeinfotech.com';
@@ -41,6 +41,10 @@ class AppConfig {
   /// Odoo user, so the list starts empty. Switched on at build time with
   /// `--dart-define=OWN_CONTACTS_ONLY=true`; VeeVee's own build shows all.
   static const bool ownContactsOnly = bool.fromEnvironment('OWN_CONTACTS_ONLY');
+
+  /// Customer TRIAL build: allow plain http:// servers in an optimised build
+  /// (`--dart-define=ALLOW_HTTP=true`). Test builds always allow http.
+  static const bool allowHttp = bool.fromEnvironment('ALLOW_HTTP');
 
   static const String supportPhone = '+91 99657 82269';
   static const String supportEmail = 'info@veeveeinfotech.com';

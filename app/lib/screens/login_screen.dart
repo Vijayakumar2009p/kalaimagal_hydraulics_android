@@ -316,7 +316,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     DropdownMenuItem(value: 'https://', child: Text('https://')),
                     DropdownMenuItem(value: 'http://', child: Text('http://')),
                   ],
-                  onChanged: _busy ? null : (v) => setState(() => _scheme = v ?? 'https://'),
+                  onChanged: _busy
+                      ? null
+                      : (v) => setState(() {
+                          _scheme = v ?? 'https://';
+                          _error = null;
+                        }),
                 ),
               ),
             ),
@@ -324,7 +329,7 @@ class _LoginScreenState extends State<LoginScreen> {
           validator: (v) {
             final u = Uri.tryParse(_fullUrl);
             if (u == null || u.host.isEmpty) return 'Enter the server address.';
-            if (kReleaseMode && _scheme == 'http://') {
+            if (kReleaseMode && !AppConfig.allowHttp && _scheme == 'http://') {
               return 'This app needs https:// (http:// works only in the test app).';
             }
             return null;
