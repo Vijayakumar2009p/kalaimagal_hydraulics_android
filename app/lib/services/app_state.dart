@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 
 import '../config.dart';
 import '../models/customer.dart';
+import '../models/field_visit.dart';
 import '../models/pending_action.dart';
 import '../utils/format.dart';
 import '../utils/validators.dart';
@@ -85,6 +86,31 @@ class LocationInput {
   final String? photoPath;
 }
 
+/// Values from the "Mark visit done" screen.
+class VisitDoneInput {
+  VisitDoneInput({
+    required this.visit,
+    required this.latitude,
+    required this.longitude,
+    required this.accuracy,
+    required this.distanceMeters,
+    this.farReason = '',
+    this.remark = '',
+    this.photoPaths = const [],
+  });
+
+  final FieldVisit visit;
+  final double latitude;
+  final double longitude;
+  final double accuracy;
+
+  /// Distance from the customer's saved location; null when it has none.
+  final double? distanceMeters;
+  final String farReason;
+  final String remark;
+  final List<String> photoPaths;
+}
+
 class UpdateInfo {
   UpdateInfo({required this.latestVersion, required this.apkUrl, this.notes = ''});
   final String latestVersion;
@@ -110,6 +136,12 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   bool rememberMe = true;
   bool loggedIn = false;
   String odooUserName = '';
+  int uid = 0;
+
+  /// Odoo id of the "Field Visit" activity type (module 19.0.1.1.0+); null = feature off.
+  int? visitTypeId;
+  List<FieldVisit> visits = [];
+  bool refreshingVisits = false;
   Map<String, dynamic> userContext = {};
   Set<String> partnerFields = {};
   bool hasAddon = false;
@@ -190,6 +222,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       rememberMe = s['rememberMe'] != false;
       loggedIn = s['loggedIn'] == true;
       odooUserName = (s['odooUserName'] ?? '') as String;
+      uid = (s['uid'] ?? 0) as int;
+      visitTypeId = s['visitTypeId'] as int?;
+      if (!AppConfig.sharedLogin && odooUserName.isNotEmpty) userName = odooUserName;
       userContext = Map<String, dynamic>.from((s['userContext'] ?? const {}) as Map);
       partnerFields = Set<String>.from((s['partnerFields'] ?? const []) as List);
       hasAddon = s['hasAddon'] == true;
@@ -200,6 +235,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final c = await store.readJson('customers');
     if (c is List) {
       customers = c.map((e) => Customer.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    }
+    final v = await store.readJson('visits');
+    if (v is List) {
+      visits = v.map((e) => FieldVisit.fromJson(Map<String, dynamic>.from(e as Map))).toList();
     }
     final q = await store.readJson('queue');
     if (q is List) {
@@ -224,6 +263,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     'rememberMe': rememberMe,
     'loggedIn': loggedIn,
     'odooUserName': odooUserName,
+    'uid': uid,
+    'visitTypeId': visitTypeId,
     'userContext': userContext,
     'partnerFields': partnerFields.toList(),
     'hasAddon': hasAddon,
@@ -235,6 +276,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _saveCustomers() => store.writeJson('customers', customers.map((c) => c.toJson()).toList());
 
   Future<void> _saveQueue() => store.writeJson('queue', queue.map((a) => a.toJson()).toList());
+
+  Future<void> _saveVisits() => store.writeJson('visits', visits.map((v) => v.toJson()).toList());
 
   Future<void> setUserName(String name) async {
     userName = name.trim();
@@ -281,6 +324,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     login = user;
     rememberMe = remember;
     odooUserName = (info['name'] ?? info['username'] ?? user).toString();
+    uid = info['uid'] is int ? info['uid'] as int : 0;
+    // Each staff member has their own Odoo login: notes use the Odoo user's name.
+    // (Customer builds with one shared login still ask each person's name.)
+    if (!AppConfig.sharedLogin) userName = odooUserName;
     final ctx = info['user_context'];
     userContext = ctx is Map ? Map<String, dynamic>.from(ctx) : {};
     needsLogin = false;
@@ -288,6 +335,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
     if (changedServer) {
       customers = [];
+      visits = [];
+      visitTypeId = null;
+      await _saveVisits();
       queue = [];
       refToId = {};
       lastRefresh = null;
@@ -326,6 +376,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     loggedIn = false;
     needsLogin = false;
     customers = [];
+    visits = [];
+    visitTypeId = null;
+    uid = 0;
     queue = [];
     refToId = {};
     lastRefresh = null;
@@ -760,6 +813,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     await syncNow();
     final old = lastRefresh == null || DateTime.now().difference(lastRefresh!) > const Duration(minutes: 10);
     if (!onlyIfOld || old) await refreshCustomers();
+    await refreshVisits();
   }
 
   Future<void>? _syncRun;
@@ -808,6 +862,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
           await _sendCreate(action);
         } else if (action.kind == PendingAction.photos) {
           await _sendPhotos(action);
+        } else if (action.kind == PendingAction.visitCreate) {
+          await _sendVisitCreate(action);
+        } else if (action.kind == PendingAction.visitDone) {
+          await _sendVisitDone(action);
         } else {
           await _sendLocation(action);
         }
@@ -855,6 +913,14 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     if (action.kind == PendingAction.create) {
       customers.removeWhere((c) => c.localRef == action.ref);
       removed.addAll(queue.where((a) => a.partnerRef == action.ref && a.partnerId == null));
+      visits.removeWhere((v) => v.partnerRef == action.ref && v.partnerId == null);
+    }
+    if (action.kind == PendingAction.visitCreate) {
+      visits.removeWhere((v) => v.localRef == action.ref);
+      removed.addAll(queue.where((a) => a.payload['activityRef'] == action.ref && a.payload['activityId'] == null));
+    }
+    if (action.kind == PendingAction.visitDone) {
+      unawaited(refreshVisits()); // the visit shows again in the list
     }
     for (final a in removed) {
       queue.remove(a);
@@ -863,6 +929,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     _applyPendingToCustomers();
     await _saveQueue();
     await _saveCustomers();
+    await _saveVisits();
     notifyListeners();
   }
 
@@ -871,6 +938,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   void _linkCreated(PendingAction a, int newId) {
     refToId[a.ref] = newId;
+    for (final v in visits.where((v) => v.partnerRef == a.ref)) {
+      v.partnerId = newId;
+    }
     _linkedAt[newId] = DateTime.now();
     for (final c in customers.where((c) => c.localRef == a.ref)) {
       c.id = newId;
@@ -1226,6 +1296,313 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   // ======================================================================
+  // Field visits (mail.activity of type "Field Visit", assigned to this user)
+  // ======================================================================
+
+  bool get visitsEnabled => visitTypeId != null;
+
+  /// Open visits, earliest first.
+  List<FieldVisit> get openVisits => List.of(visits)..sort((a, b) => a.deadline.compareTo(b.deadline));
+
+  int get visitsDueCount => visits.where((v) => v.daysLeft <= 0).length;
+
+  List<FieldVisit> visitsFor(Customer c) {
+    final x = resolve(c);
+    return openVisits
+        .where((v) => (!x.isLocal && v.partnerId == x.id) || (x.localRef != null && v.partnerRef == x.localRef))
+        .toList();
+  }
+
+  /// Downloads this user's open Field Visits; visits changed on the phone
+  /// (planned or done, not yet sent) are kept as they are on the phone.
+  Future<void> refreshVisits() async {
+    final typeId = visitTypeId;
+    if (typeId == null || !loggedIn || needsLogin || refreshingVisits) return;
+    refreshingVisits = true;
+    notifyListeners();
+    try {
+      if (uid == 0) await _loadUid(); // logged in with an older app version
+      final rows = await _call(
+        'mail.activity',
+        'search_read',
+        [
+          [
+            ['user_id', '=', uid],
+            ['activity_type_id', '=', typeId],
+            ['res_model', '=', 'res.partner'],
+          ],
+        ],
+        kwargs: {
+          'fields': ['res_id', 'res_name', 'summary', 'note', 'date_deadline'],
+          'order': 'date_deadline asc, id asc',
+          'limit': 500,
+        },
+      );
+      final doneIds = {
+        for (final a in queue.where((a) => a.kind == PendingAction.visitDone)) a.payload['activityId'] as int?,
+      };
+      final fresh = [
+        for (final r in (rows as List).cast<Map>())
+          if (!doneIds.contains(r['id'])) FieldVisit.fromOdoo(Map<String, dynamic>.from(r)),
+      ];
+      // Planned on the phone and not yet sent:
+      final local = visits.where((v) => v.isLocal && queue.any((a) => a.ref == v.localRef)).toList();
+      visits = [...fresh, ...local];
+      await _saveVisits();
+    } on OdooException {
+      // Offline or refused: keep the list we have.
+    } finally {
+      refreshingVisits = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadUid() async {
+    final ids = await _call(
+      'res.users',
+      'search',
+      [
+        [
+          ['login', '=', login],
+        ],
+      ],
+      kwargs: {'limit': 1},
+    );
+    if (ids is List && ids.isNotEmpty) {
+      uid = ids.first as int;
+      await _saveSettings();
+    }
+  }
+
+  /// Plans a Field Visit for this user (customer page → Plan field visit).
+  Future<String> scheduleVisit(
+    Customer customer, {
+    required String summary,
+    required DateTime date,
+    String note = '',
+  }) async {
+    final ref = _newRef();
+    final c = resolve(customer);
+    final day = DateTime(date.year, date.month, date.day);
+    queue.add(
+      PendingAction(
+        ref: ref,
+        kind: PendingAction.visitCreate,
+        createdAt: DateTime.now(),
+        customerName: c.name,
+        partnerId: c.isLocal ? null : c.id,
+        partnerRef: c.isLocal ? c.localRef : null,
+        payload: {'summary': summary.trim(), 'note': note.trim(), 'date': odooDate(day), 'userName': userName},
+      ),
+    );
+    visits.add(
+      FieldVisit(
+        localRef: ref,
+        partnerId: c.isLocal ? null : c.id,
+        partnerRef: c.isLocal ? c.localRef : null,
+        customerName: c.name,
+        summary: summary.trim(),
+        note: note.trim(),
+        deadline: day,
+      ),
+    );
+    await _saveQueue();
+    await _saveVisits();
+    notifyListeners();
+    try {
+      await syncNow();
+    } catch (_) {
+      // Saved on the phone; it will be sent later.
+    }
+    return ref;
+  }
+
+  /// Marks a visit done on site. Returns the queue reference.
+  Future<String> markVisitDone(VisitDoneInput input) async {
+    final ref = _newRef();
+    final v = input.visit;
+    final photos = await _keepPhotos(input.photoPaths, ref);
+    queue.add(
+      PendingAction(
+        ref: ref,
+        kind: PendingAction.visitDone,
+        createdAt: DateTime.now(),
+        customerName: v.customerName,
+        partnerId: v.partnerId,
+        partnerRef: v.partnerId == null ? v.partnerRef : null,
+        payload: {
+          'activityId': v.id,
+          if (v.id == null) 'activityRef': v.localRef,
+          'summary': v.summary,
+          'lat': input.latitude,
+          'lng': input.longitude,
+          'accuracy': input.accuracy,
+          'distance': input.distanceMeters,
+          'farReason': input.farReason.trim(),
+          'remark': input.remark.trim(),
+          if (photos.isNotEmpty) 'photos': photos,
+          'userName': userName,
+        },
+      ),
+    );
+    visits.remove(v);
+    await _saveQueue();
+    await _saveVisits();
+    notifyListeners();
+    try {
+      await syncNow();
+    } catch (_) {
+      // Saved on the phone; it will be sent later.
+    }
+    return ref;
+  }
+
+  Future<void> _sendVisitCreate(PendingAction a) async {
+    final partnerId = a.partnerId ?? (a.partnerRef != null ? refToId[a.partnerRef] : null);
+    if (partnerId == null) throw _WaitForCreate();
+    a.partnerId = partnerId;
+    final typeId = visitTypeId;
+    if (uid == 0) await _loadUid();
+    if (typeId == null) {
+      throw OdooException('Field visits need the VeeVee Field Locator module (19.0.1.1.0 or newer) in Odoo.');
+    }
+    final summary = (a.payload['summary'] ?? '').toString();
+    final date = (a.payload['date'] ?? '').toString();
+    int? id;
+    if (a.payload['sent'] == true) {
+      // An earlier try may have reached Odoo before the network dropped.
+      final found = await _call(
+        'mail.activity',
+        'search',
+        [
+          [
+            ['res_model', '=', 'res.partner'],
+            ['res_id', '=', partnerId],
+            ['user_id', '=', uid],
+            ['activity_type_id', '=', typeId],
+            ['summary', '=', summary],
+            ['date_deadline', '=', date],
+          ],
+        ],
+        kwargs: {
+          'limit': 1,
+          'context': {'active_test': false},
+        },
+      );
+      if (found is List && found.isNotEmpty) id = found.first as int;
+    }
+    if (id == null) {
+      a.payload['sent'] = true;
+      await _saveQueue();
+      final note = (a.payload['note'] ?? '').toString();
+      final created = await _call(
+        'res.partner',
+        'activity_schedule',
+        [
+          [partnerId],
+        ],
+        kwargs: {
+          'activity_type_id': typeId,
+          'user_id': uid,
+          'summary': summary,
+          'date_deadline': date,
+          if (note.isNotEmpty) 'note': note,
+        },
+      );
+      id = created is List ? created.first as int : created as int;
+    }
+    refToId[a.ref] = id;
+    for (final v in visits.where((v) => v.localRef == a.ref)) {
+      v.id = id;
+      v.localRef = null;
+      v.partnerId = partnerId;
+    }
+    for (final other in queue.where((x) => x.payload['activityRef'] == a.ref)) {
+      other.payload['activityId'] = id;
+      other.partnerId ??= partnerId;
+    }
+    await _saveVisits();
+    await _saveSettings();
+  }
+
+  Future<void> _sendVisitDone(PendingAction a) async {
+    var activityId = a.payload['activityId'] as int?;
+    if (activityId == null) {
+      final r = a.payload['activityRef'] as String?;
+      activityId = r != null ? refToId[r] : null;
+      if (activityId == null) throw _WaitForCreate();
+      a.payload['activityId'] = activityId;
+    }
+    final partnerId = a.partnerId ?? (a.partnerRef != null ? refToId[a.partnerRef] : null);
+    if (a.payload['sent'] == true) {
+      // Done already if the activity is archived (Odoo keeps done activities archived).
+      final done = await _call(
+        'mail.activity',
+        'search_count',
+        [
+          [
+            ['id', '=', activityId],
+            ['active', '=', false],
+          ],
+        ],
+        kwargs: {
+          'context': {'active_test': false},
+        },
+      );
+      if (done is int && done > 0) return;
+    }
+    final attachments = await _uploadPhotos(a, 'Field visit photo');
+    final feedback = _visitFeedback(a);
+    a.payload['sent'] = true;
+    await _saveQueue();
+    try {
+      await _call(
+        'mail.activity',
+        'action_feedback',
+        [
+          [activityId],
+        ],
+        kwargs: {'feedback': feedback, 'attachment_ids': attachments},
+      );
+    } on OdooNetworkException {
+      rethrow;
+    } on OdooException catch (e) {
+      // The office deleted the activity meanwhile: keep the visit as a note.
+      final gone = e.message.contains('does not exist') || e.message.contains('has been deleted');
+      if (!gone || partnerId == null) rethrow;
+      final summary = (a.payload['summary'] ?? '').toString();
+      await _postNote(
+        partnerId,
+        'Field visit done${summary.isNotEmpty ? ': $summary' : ''}. $feedback',
+        attachmentIds: attachments,
+      );
+    }
+  }
+
+  String _visitFeedback(PendingAction a) {
+    final p = a.payload;
+    final lat = (p['lat'] as num?)?.toDouble();
+    final lng = (p['lng'] as num?)?.toDouble();
+    final distance = (p['distance'] as num?)?.toDouble();
+    final parts = <String>['Done on site by ${_by(a)} on ${formatDateTime(a.createdAt)}.'];
+    if (distance != null) {
+      parts.add('${formatMeters(distance)} from the customer\'s saved location.');
+    } else {
+      parts.add('Customer has no saved location.');
+    }
+    if (lat != null && lng != null) {
+      parts.add(
+        'Lat ${lat.toStringAsFixed(6)}, Long ${lng.toStringAsFixed(6)} (GPS ±${(p['accuracy'] as num? ?? 0).round()} m).',
+      );
+    }
+    final reason = (p['farReason'] ?? '').toString();
+    if (reason.isNotEmpty) parts.add('Far from the customer: $reason.');
+    final remark = (p['remark'] ?? '').toString();
+    if (remark.isNotEmpty) parts.add('Remark: $remark');
+    return parts.join(' ');
+  }
+
+  // ======================================================================
   // App updates (needs the VeeVee Field Locator Odoo module)
   // ======================================================================
 
@@ -1240,7 +1617,18 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         notes: (r['release_notes'] ?? '').toString(),
       );
       update = info;
+      final typeId = r['field_visit_type_id'];
+      final newType = typeId is int ? typeId : null;
+      if (newType != visitTypeId) {
+        visitTypeId = newType;
+        await _saveSettings();
+        if (newType == null) {
+          visits = [];
+          await _saveVisits();
+        }
+      }
       notifyListeners();
+      if (visitTypeId != null) unawaited(refreshVisits());
       return info;
     } catch (_) {
       return null;

@@ -1,9 +1,11 @@
 /// A change made on the phone that still has to reach Odoo.
 ///
-/// Three kinds:
-///  * [PendingAction.create]   - a new customer (payload = Odoo values, photos)
-///  * [PendingAction.location] - a GPS location (+ optional address, photo, remark)
-///  * [PendingAction.photos]   - photos added to an existing customer
+/// Kinds:
+///  * [PendingAction.create]      - a new customer (payload = Odoo values, photos)
+///  * [PendingAction.location]    - a GPS location (+ optional address, photo, remark)
+///  * [PendingAction.photos]      - photos added to an existing customer
+///  * [PendingAction.visitCreate] - a Field Visit scheduled on the phone
+///  * [PendingAction.visitDone]   - a Field Visit marked done on site
 class PendingAction {
   PendingAction({
     required this.ref,
@@ -21,6 +23,8 @@ class PendingAction {
   static const String create = 'create';
   static const String location = 'location';
   static const String photos = 'photos';
+  static const String visitCreate = 'visitCreate';
+  static const String visitDone = 'visitDone';
 
   /// Unique reference on this phone.
   final String ref;
@@ -46,6 +50,8 @@ class PendingAction {
       return payload['withLocation'] == true ? 'New customer + location' : 'New customer';
     }
     if (kind == photos) return 'Photos';
+    if (kind == visitCreate) return 'Field visit planned';
+    if (kind == visitDone) return 'Field visit done';
     return 'Location';
   }
 

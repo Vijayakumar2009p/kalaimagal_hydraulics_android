@@ -5,7 +5,7 @@ class AppConfig {
   static const String appName = 'VeeVee Field Locator';
 
   /// Must match `version:` in pubspec.yaml (the part before `+`).
-  static const String appVersion = '1.0.9';
+  static const String appVersion = '1.1.0';
 
   /// Pre-filled on the login screen (Advanced settings).
   static const String defaultServerUrl = 'https://www.veeveeinfotech.com';
@@ -45,6 +45,16 @@ class AppConfig {
   /// Customer TRIAL build: allow plain http:// servers in an optimised build
   /// (`--dart-define=ALLOW_HTTP=true`). Test builds always allow http.
   static const bool allowHttp = bool.fromEnvironment('ALLOW_HTTP');
+
+  /// Customer builds where all staff share one Odoo login: ask each
+  /// person's name for the notes (`--dart-define=SHARED_LOGIN=true`).
+  /// VeeVee's own build: each staff member has their own login, and the
+  /// Odoo user's name is used.
+  static const bool sharedLogin = bool.fromEnvironment('SHARED_LOGIN');
+
+  /// Field visit "Mark done": warn when farther than this from the
+  /// customer's saved location (warning only, never blocks).
+  static const double visitFarMeters = 300;
 
   static const String supportPhone = '+91 99657 82269';
   static const String supportEmail = 'info@veeveeinfotech.com';

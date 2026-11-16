@@ -78,33 +78,41 @@ class SettingsScreen extends StatelessWidget {
           const SectionLabel('You'),
           _card(
             ListTile(
-              title: const Text('Your name', style: TextStyle(fontSize: 13, color: VV.inkMuted)),
+              title: Text(
+                AppConfig.sharedLogin ? 'Your name' : 'Your name (from your Odoo login)',
+                style: const TextStyle(fontSize: 13, color: VV.inkMuted),
+              ),
               subtitle: Text(
                 app.userName,
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: VV.ink),
               ),
-              trailing: TextButton(
-                onPressed: () async {
-                  final yes = await showDialog<bool>(
-                    context: context,
-                    builder: (d) => AlertDialog(
-                      title: const Text('Change your name?'),
-                      content: Text(
-                        'Your name "${app.userName}" is written in every note sent to Odoo. '
-                        'Do you really want to change it?',
-                      ),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('No')),
-                        FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('Yes, change')),
-                      ],
+              // Own Odoo login per person: the name comes from Odoo.
+              trailing: !AppConfig.sharedLogin
+                  ? null
+                  : TextButton(
+                      onPressed: () async {
+                        final yes = await showDialog<bool>(
+                          context: context,
+                          builder: (d) => AlertDialog(
+                            title: const Text('Change your name?'),
+                            content: Text(
+                              'Your name "${app.userName}" is written in every note sent to Odoo. '
+                              'Do you really want to change it?',
+                            ),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('No')),
+                              FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('Yes, change')),
+                            ],
+                          ),
+                        );
+                        if (yes == true && context.mounted) {
+                          Navigator.of(
+                            context,
+                          ).push(MaterialPageRoute(builder: (_) => const YourNameScreen(editing: true)));
+                        }
+                      },
+                      child: const Text('Change'),
                     ),
-                  );
-                  if (yes == true && context.mounted) {
-                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const YourNameScreen(editing: true)));
-                  }
-                },
-                child: const Text('Change'),
-              ),
             ),
           ),
           const SizedBox(height: 24),
@@ -247,6 +255,10 @@ class _PendingRow extends StatelessWidget {
                               ? 'The new customer and its location will be removed from this phone.'
                               : action.kind == PendingAction.photos
                               ? 'These photos will be removed from this phone.'
+                              : action.kind == PendingAction.visitCreate
+                              ? 'This planned field visit will be removed from this phone.'
+                              : action.kind == PendingAction.visitDone
+                              ? 'The visit will not be marked done; it shows again in Field visits.'
                               : 'This location will be removed from this phone.',
                         ),
                         actions: [

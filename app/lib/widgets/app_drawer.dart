@@ -5,6 +5,7 @@ import '../app_scope.dart';
 import '../config.dart';
 import '../screens/new_customer_screen.dart';
 import '../screens/settings_screen.dart';
+import '../screens/visits_screen.dart';
 import '../theme.dart';
 import '../utils/format.dart';
 import 'common.dart';
@@ -126,6 +127,14 @@ class AppDrawer extends StatelessWidget {
                     onShowWaiting();
                   },
                 ),
+                if (app.visitsEnabled)
+                  _item(
+                    Icons.event_note_outlined,
+                    'Field visits',
+                    trailing: app.visits.isEmpty ? null : '${app.visits.length}',
+                    highlight: app.visitsDueCount > 0,
+                    onTap: () => open(const VisitsScreen()),
+                  ),
                 _item(Icons.person_add_alt_1_outlined, 'New customer', onTap: () => open(const NewCustomerScreen())),
                 _item(
                   Icons.sync,

@@ -39,7 +39,7 @@ The module is optional. The app works without it, but then:
 
 On **Odoo Online** (`*.odoo.com`) custom modules cannot be installed. The app still saves locations there.
 
-### 1.2 Create the shared field login
+### 1.2 Create the field login(s)
 
 **Settings → Users & Companies → Users → New**
 
@@ -72,6 +72,17 @@ New customers are created with: name, company/individual, phone, email, GSTIN (c
 Note: Odoo 19 has no separate *Mobile* field on contacts, so the mobile number is saved in **Phone**. If a module adds a `mobile` field, the app uses it automatically.
 
 ---
+
+### 1.4 Field visits (module 19.0.1.1.0 or newer)
+
+The module adds the activity type **Field Visit** (map-pin icon, next to *Document* in *Schedule Activity* on contacts).
+
+- **Office:** open a contact → *Activities* → **Field Visit**, write the job in *Summary* (e.g. "Calendar distribution 2027"), set the date and **Assigned to** = the staff member. For many customers at once: select them in the Contacts list → ⚙ *Actions* → *Schedule Activity*.
+- **App:** each staff member logs in with **their own Odoo login** and sees only the visits assigned to them (*Field visits* in the menu and a banner on the home screen; *Overdue / Today / Upcoming*). Staff can also plan a visit from a customer page (*Plan field visit*).
+- **Mark done:** the app takes the GPS position and shows the distance from the customer's saved location. Farther than 300 m only **warns** and asks for a reason. Remark and photos are optional. If the customer has no location yet, the app offers to save this place as its location.
+- **In Odoo** the activity is marked done with a note like: *"Done on site by Ravi on 16-11-2026, 16:00. 40 m from the customer's saved location. Lat …, Long … (GPS ±6 m). Remark: Gave 2 calendars"*, with the photos attached.
+
+Give each field user the **"Field Locator: location only"** group, as in 1.2. Each user needs an Odoo user licence.
 
 ## 2. Before building: set your server
 
@@ -154,7 +165,7 @@ GitHub builds a third file, **field-locator-TRIAL-apk** (about 10-12 MB), for cu
 Build it yourself with:
 
 ```bash
-ORG_GRADLE_PROJECT_allowHttp=true flutter build apk --release --target-platform android-arm64 --dart-define=OWN_CONTACTS_ONLY=true --dart-define=ALLOW_HTTP=true
+ORG_GRADLE_PROJECT_allowHttp=true flutter build apk --release --target-platform android-arm64 --dart-define=OWN_CONTACTS_ONLY=true --dart-define=ALLOW_HTTP=true --dart-define=SHARED_LOGIN=true
 ```
 
 ## 4. Releasing an update

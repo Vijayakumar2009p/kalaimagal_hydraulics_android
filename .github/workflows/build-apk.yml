@@ -57,7 +57,7 @@ jobs:
       # only contacts created by the logged-in user. Built before the release
       # APK because both write app-release.apk; it is renamed here.
       - run: |
-          flutter build apk --release --target-platform android-arm64 --dart-define=OWN_CONTACTS_ONLY=true --dart-define=ALLOW_HTTP=true
+          flutter build apk --release --target-platform android-arm64 --dart-define=OWN_CONTACTS_ONLY=true --dart-define=ALLOW_HTTP=true --dart-define=SHARED_LOGIN=true
           mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/field-locator-trial.apk
         env:
           ORG_GRADLE_PROJECT_allowHttp: "true"

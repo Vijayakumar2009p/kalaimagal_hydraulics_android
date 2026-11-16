@@ -15,7 +15,9 @@ class VeeveeFieldLocator(models.AbstractModel):
           veevee_field_locator.release_notes   optional short text
         """
         params = self.env['ir.config_parameter'].sudo()
+        visit_type = self.env.ref('veevee_field_locator.activity_type_field_visit', raise_if_not_found=False)
         return {
+            'field_visit_type_id': visit_type.id if visit_type and visit_type.active else False,
             'latest_version': params.get_param('veevee_field_locator.latest_version', '1.0.0'),
             'apk_url': params.get_param('veevee_field_locator.apk_url', ''),
             'release_notes': params.get_param('veevee_field_locator.release_notes', ''),
