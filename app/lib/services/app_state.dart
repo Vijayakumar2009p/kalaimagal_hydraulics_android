@@ -442,6 +442,15 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     return wanted.where(partnerFields.contains).toList();
   }
 
+  /// Contacts shown in the app. Customer builds: only those created by this login.
+  List<dynamic> get _listDomain => AppConfig.ownContactsOnly
+      ? [
+          '&',
+          ['create_uid.login', '=ilike', login],
+          ...AppConfig.customerDomain,
+        ]
+      : AppConfig.customerDomain;
+
   /// Downloads all contacts so search works offline.
   Future<void> refreshCustomers() async {
     if (refreshing || !loggedIn) return;
@@ -459,7 +468,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
           'search_read',
           [],
           kwargs: {
-            'domain': AppConfig.customerDomain,
+            'domain': _listDomain,
             'fields': _readFields,
             'offset': offset,
             'limit': batch,

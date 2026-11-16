@@ -265,7 +265,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (noCustomers && loading) {
       text = 'Loading customers from Odoo…';
     } else if (noCustomers) {
-      text = 'No customers on this phone yet. Pull down to load them from Odoo.';
+      text = AppConfig.ownContactsOnly
+          ? 'No contacts yet. Tap New customer to add your first one.'
+          : 'No customers on this phone yet. Pull down to load them from Odoo.';
     } else if (_search.text.isNotEmpty) {
       text = 'No customer matches "${_search.text}".\nTap "New customer" to add one.';
     } else {

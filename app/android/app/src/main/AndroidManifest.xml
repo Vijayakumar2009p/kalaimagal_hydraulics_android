@@ -13,6 +13,7 @@
         android:label="VeeVee Field Locator"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="${usesCleartextTraffic}"
         android:allowBackup="false">
         <activity
             android:name=".MainActivity"

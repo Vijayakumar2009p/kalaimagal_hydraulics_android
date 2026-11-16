@@ -5,7 +5,7 @@ class AppConfig {
   static const String appName = 'VeeVee Field Locator';
 
   /// Must match `version:` in pubspec.yaml (the part before `+`).
-  static const String appVersion = '1.0.7';
+  static const String appVersion = '1.0.8';
 
   /// Pre-filled on the login screen (Advanced settings).
   static const String defaultServerUrl = 'https://www.veeveeinfotech.com';
@@ -36,6 +36,11 @@ class AppConfig {
     ['is_company', '=', true],
     ['type', '=', 'contact'],
   ];
+
+  /// Customer (trial) builds: show only contacts created by the logged-in
+  /// Odoo user, so the list starts empty. Switched on at build time with
+  /// `--dart-define=OWN_CONTACTS_ONLY=true`; VeeVee's own build shows all.
+  static const bool ownContactsOnly = bool.fromEnvironment('OWN_CONTACTS_ONLY');
 
   static const String supportPhone = '+91 99657 82269';
   static const String supportEmail = 'info@veeveeinfotech.com';

@@ -32,6 +32,10 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Plain http:// is off in release builds. The customer TRIAL build
+        // turns it on with ORG_GRADLE_PROJECT_allowHttp=true.
+        manifestPlaceholders["usesCleartextTraffic"] =
+            (project.findProperty("allowHttp") ?: "false").toString()
     }
 
     signingConfigs {
@@ -46,6 +50,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Test builds can always reach a local http:// Odoo.
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
+        }
         release {
             signingConfig =
                 if (keystorePropertiesFile.exists()) {

@@ -53,6 +53,14 @@ jobs:
       - run: flutter analyze --no-fatal-infos
       # Test APK: can also reach a local http:// Odoo (e.g. http://192.168.1.10:8069)
       - run: flutter build apk --debug
+      # Customer TRIAL APK: small (64-bit phones), allows http://, and shows
+      # only contacts created by the logged-in user. Built before the release
+      # APK because both write app-release.apk; it is renamed here.
+      - run: |
+          flutter build apk --release --target-platform android-arm64 --dart-define=OWN_CONTACTS_ONLY=true
+          mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/field-locator-trial.apk
+        env:
+          ORG_GRADLE_PROJECT_allowHttp: "true"
       # Release APK for staff: https only
       - run: flutter build apk --release
 
@@ -60,6 +68,10 @@ jobs:
         with:
           name: veevee-field-locator-TEST-apk
           path: app/build/app/outputs/flutter-apk/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: field-locator-TRIAL-apk
+          path: app/build/app/outputs/flutter-apk/field-locator-trial.apk
       - uses: actions/upload-artifact@v4
         with:
           name: veevee-field-locator-RELEASE-apk

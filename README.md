@@ -143,6 +143,20 @@ Share the APK (WhatsApp, Drive, email). On the phone: open it → allow **Instal
 
 ---
 
+### 3.5 Customer TRIAL APK
+
+GitHub builds a third file, **field-locator-TRIAL-apk** (about 10-12 MB), for customers who try the app on their own Odoo:
+
+- allows `http://` servers (the normal release APK needs `https://`),
+- shows **only contacts created by the logged-in Odoo user** (the list starts empty; staff add customers with *New customer*),
+- 64-bit phones only (practically every Android 8+ phone from the last 6-7 years).
+
+Build it yourself with:
+
+```bash
+ORG_GRADLE_PROJECT_allowHttp=true flutter build apk --release --target-platform android-arm64 --dart-define=OWN_CONTACTS_ONLY=true
+```
+
 ## 4. Releasing an update
 
 1. Raise the version in **both** `app/pubspec.yaml` (`version: 1.1.0+2`) and `app/lib/config.dart` (`appVersion = '1.1.0'`).
