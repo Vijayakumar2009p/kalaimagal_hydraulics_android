@@ -8,7 +8,6 @@ import 'package:flutter/widgets.dart';
 import '../config.dart';
 import '../models/customer.dart';
 import '../models/field_visit.dart';
-import '../models/partner_tag.dart';
 import '../models/pending_action.dart';
 import '../utils/format.dart';
 import '../utils/validators.dart';
@@ -30,7 +29,6 @@ class NewCustomerInput {
     this.photoPaths = const [],
     this.profilePhoto,
     this.contacts = const [],
-    this.tagIds = const [],
   });
 
   final String name;
@@ -51,9 +49,6 @@ class NewCustomerInput {
 
   /// Contact persons of a new company ("Add contact"); created under it.
   final List<ContactInput> contacts;
-
-  /// Odoo contact tags chosen on the form (main tags and sub-tags).
-  final List<int> tagIds;
 }
 
 /// A contact person added on the "New customer" screen.
@@ -156,10 +151,6 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   // ---- data ----
   List<Customer> customers = [];
-
-  /// Odoo contact tags (all of them; the app uses main tags with sub-tags).
-  List<PartnerTag> allTags = [];
-  TagTree tagTree = TagTree(const []);
   List<PendingAction> queue = [];
 
   // ---- live status ----
@@ -241,11 +232,6 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       refToId = Map<String, int>.from((s['refToId'] ?? const {}) as Map);
       _nextLocalId = (s['nextLocalId'] ?? -1) as int;
     }
-    final t = await store.readJson('tags');
-    if (t is List) {
-      allTags = t.map((e) => PartnerTag.fromJson(Map<String, dynamic>.from(e as Map))).toList();
-      tagTree = TagTree(allTags);
-    }
     final c = await store.readJson('customers');
     if (c is List) {
       customers = c.map((e) => Customer.fromJson(Map<String, dynamic>.from(e as Map))).toList();
@@ -258,7 +244,6 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     if (q is List) {
       queue = q.map((e) => PendingAction.fromJson(Map<String, dynamic>.from(e as Map))).toList();
     }
-    _applyPendingToCustomers();
     if (loggedIn) {
       _password = await store.readSecret('password');
       _client = OdooClient(serverUrl)..sessionId = await store.readSecret('session');
@@ -391,8 +376,6 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     loggedIn = false;
     needsLogin = false;
     customers = [];
-    allTags = [];
-    tagTree = TagTree(const []);
     visits = [];
     visitTypeId = null;
     uid = 0;
@@ -405,7 +388,6 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     await store.writeSecret('session', null);
     await _saveQueue();
     await _saveCustomers();
-    await store.writeJson('tags', const []);
     await _saveSettings();
     for (final p in photos) {
       await store.deletePhoto(p);
@@ -506,7 +488,6 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       'partner_latitude',
       'partner_longitude',
       'date_localization',
-      'category_id',
     ];
     if (partnerFields.isEmpty) {
       return wanted.where((f) => f != 'mobile' && f != 'date_localization').toList();
@@ -530,7 +511,6 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     refreshError = null;
     notifyListeners();
     final started = DateTime.now();
-    await refreshTags();
     try {
       const batch = 500;
       final rows = <Map<String, dynamic>>[];
@@ -590,108 +570,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       for (final c in matches) {
         c.pending = true;
         if (a.kind == PendingAction.location) _applyLocation(c, a.payload);
-        if (a.kind == PendingAction.tags) c.tagIds = _intList(a.payload['tagIds']);
       }
     }
-    for (final c in customers) {
-      c.tagText = tagTree.labels(c.tagIds).join(' · ');
-    }
-  }
-
-  static List<int> _intList(Object? v) => v is List ? v.whereType<int>().toList() : <int>[];
-
-  // ======================================================================
-  // Contact tags
-  // ======================================================================
-
-  /// Downloads the Odoo contact tags (works offline from the saved copy).
-  Future<void> refreshTags() async {
-    try {
-      final rows = await _call(
-        'res.partner.category',
-        'search_read',
-        [],
-        kwargs: {
-          'domain': [],
-          'fields': ['name', 'parent_id', 'color'],
-          'order': 'name asc, id asc',
-        },
-      );
-      allTags = (rows as List).map((e) => PartnerTag.fromOdoo(Map<String, dynamic>.from(e as Map))).toList();
-      tagTree = TagTree(allTags);
-      await store.writeJson('tags', allTags.map((t) => t.toJson()).toList());
-      _applyPendingToCustomers();
-      notifyListeners();
-    } on OdooNetworkException {
-      // Offline: keep the saved tags.
-    } on OdooException {
-      // Not allowed to read tags: keep the saved ones.
-    }
-  }
-
-  /// Changes the app's tags on [customer]; tags set in Odoo that the app
-  /// does not show are kept. Saved on the phone first, then sent.
-  Future<void> setTags(Customer customer, List<int> selected) async {
-    final c = resolve(customer);
-    final managed = tagTree.managedIds;
-    final chosen = selected.where(managed.contains).toSet();
-    final before = c.tagIds.toSet();
-    final add = chosen.difference(before).toList();
-    final remove = before.where((id) => managed.contains(id) && !chosen.contains(id)).toList();
-    if (add.isEmpty && remove.isEmpty) return;
-    final after = [...c.tagIds.where((id) => !remove.contains(id)), ...add];
-
-    // Customer still waiting to be created: change the waiting entry.
-    final create = c.isLocal ? pendingByRef(c.localRef ?? '') : null;
-    if (create != null && create.payload['sent'] != true) {
-      final vals = Map<String, dynamic>.from(create.payload['vals'] as Map);
-      if (after.isEmpty) {
-        vals.remove('category_id');
-      } else {
-        vals['category_id'] = [
-          [6, 0, after],
-        ];
-      }
-      create.payload['vals'] = vals;
-    } else {
-      queue.add(
-        PendingAction(
-          ref: _newRef(),
-          kind: PendingAction.tags,
-          createdAt: DateTime.now(),
-          customerName: c.name,
-          partnerId: c.isLocal ? null : c.id,
-          partnerRef: c.isLocal ? c.localRef : null,
-          payload: {'add': add, 'remove': remove, 'tagIds': after, 'userName': userName},
-        ),
-      );
-    }
-    c.tagIds = after;
-    c.tagText = tagTree.labels(after).join(' · ');
-    c.pending = true;
-    await _saveQueue();
-    await _saveCustomers();
-    notifyListeners();
-    try {
-      await syncNow();
-    } catch (_) {
-      // Saved on the phone; it will be sent later.
-    }
-  }
-
-  Future<void> _sendTags(PendingAction a) async {
-    final partnerId = a.partnerId ?? (a.partnerRef != null ? refToId[a.partnerRef] : null);
-    if (partnerId == null) throw _WaitForCreate();
-    a.partnerId = partnerId;
-    final commands = [
-      for (final id in _intList(a.payload['add'])) [4, id],
-      for (final id in _intList(a.payload['remove'])) [3, id],
-    ];
-    if (commands.isEmpty) return;
-    await _call('res.partner', 'write', [
-      [partnerId],
-      {'category_id': commands},
-    ]);
   }
 
   void _applyLocation(Customer c, Map<String, dynamic> p) {
@@ -767,10 +647,6 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       if (input.zip.trim().isNotEmpty) 'zip': input.zip.trim(),
       if (!input.isCompany && input.parent != null && !input.parent!.isLocal) 'parent_id': input.parent!.id,
       if (partnerFields.contains('customer_rank')) 'customer_rank': 1,
-      if (input.tagIds.isNotEmpty)
-        'category_id': [
-          [6, 0, input.tagIds],
-        ],
     };
     final gstState = input.vat.trim().isEmpty ? null : Validators.gstinState(input.vat);
     final parent = input.isCompany ? null : input.parent;
@@ -806,9 +682,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       zip: input.zip.trim(),
       stateName: gstState ?? '',
       pending: true,
-      tagIds: List.of(input.tagIds),
     );
-    customer.tagText = tagTree.labels(input.tagIds).join(' · ');
     customers.insert(0, customer);
     // Extra contact persons (company or individual): each one is created
     // under the new customer once it is in Odoo.
@@ -992,8 +866,6 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
           await _sendVisitCreate(action);
         } else if (action.kind == PendingAction.visitDone) {
           await _sendVisitDone(action);
-        } else if (action.kind == PendingAction.tags) {
-          await _sendTags(action);
         } else {
           await _sendLocation(action);
         }
