@@ -8,10 +8,12 @@ import '../theme.dart';
 import '../utils/validators.dart';
 import '../widgets/common.dart';
 import '../widgets/photo_strip.dart';
+import '../widgets/tag_picker.dart';
 import 'customer_screen.dart';
 import 'set_location_screen.dart';
 
-/// New customer with basic details only.
+/// New customer: one form. Company name is optional; when it is filled a
+/// company is created with this person as its contact.
 class NewCustomerScreen extends StatefulWidget {
   const NewCustomerScreen({super.key});
 
@@ -21,6 +23,8 @@ class NewCustomerScreen extends StatefulWidget {
 
 class _NewCustomerScreenState extends State<NewCustomerScreen> {
   final _form = GlobalKey<FormState>();
+  final _company = TextEditingController();
+  final _companyFocus = FocusNode();
   final _name = TextEditingController();
   final _mobile = TextEditingController();
   final _gstin = TextEditingController();
@@ -29,22 +33,32 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
   final _city = TextEditingController();
   final _zip = TextEditingController();
 
-  bool _isCompany = true;
+  /// Existing Odoo company picked from the suggestions.
   Customer? _parent;
+  Set<int> _tags = {};
   bool _busy = false;
   final _photos = PhotoSelection();
   final List<_ContactRow> _contacts = [];
 
   @override
   void dispose() {
-    for (final c in [_name, _mobile, _gstin, _email, _street, _city, _zip]) {
+    for (final c in [_company, _name, _mobile, _gstin, _email, _street, _city, _zip]) {
       c.dispose();
     }
+    _companyFocus.dispose();
     for (final r in _contacts) {
       r.dispose();
     }
     super.dispose();
   }
+
+  String get _companyText => _company.text.trim();
+
+  /// Picked an existing company (and did not change its name afterwards).
+  bool get _existingCompany => _parent != null && _parent!.name == _companyText;
+
+  /// A new company will be created.
+  bool get _newCompany => _companyText.isNotEmpty && !_existingCompany;
 
   void _addContact() {
     final row = _ContactRow();
@@ -125,7 +139,7 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
     setState(() => _busy = true);
     final app = AppScope.read(context);
     try {
-      final dups = await app.findDuplicates(_mobile.text, _isCompany ? _gstin.text : '');
+      final dups = await app.findDuplicates(_mobile.text, _newCompany ? _gstin.text : '');
       if (!mounted) return;
       if (dups.isNotEmpty) {
         final choice = await _showDuplicates(dups);
@@ -135,20 +149,27 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
           return;
         }
       }
+      final extra = [for (final r in _contacts) ContactInput(name: r.name.text, phone: r.phone.text)];
+      final newCompany = _newCompany;
       final customer = await app.addCustomer(
         NewCustomerInput(
-          name: _name.text,
-          isCompany: _isCompany,
+          // New company: the company is the customer, the person its first contact.
+          name: newCompany ? _companyText : _name.text,
+          isCompany: newCompany,
           phone: _mobile.text,
           email: _email.text,
-          vat: _isCompany ? _gstin.text : '',
+          vat: newCompany ? _gstin.text : '',
           street: _street.text,
           city: _city.text,
           zip: _zip.text,
-          parent: _parent,
+          parent: _existingCompany ? _parent : null,
           photoPaths: List.of(_photos.paths),
           profilePhoto: _photos.profileIndex,
-          contacts: [for (final r in _contacts) ContactInput(name: r.name.text, phone: r.phone.text)],
+          tagIds: _tags.toList(),
+          contacts: [
+            if (newCompany) ContactInput(name: _name.text, phone: _mobile.text),
+            ...extra,
+          ],
         ),
       );
       if (!mounted) return;
@@ -260,19 +281,10 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
     );
   }
 
-  Future<void> _pickCompany() async {
-    final picked = await showModalBottomSheet<Customer>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (c) => const _CompanyPicker(),
-    );
-    if (picked != null) setState(() => _parent = picked);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final gstState = _isCompany && Validators.gstinError(_gstin.text) == null && _gstin.text.trim().isNotEmpty
+    final app = AppScope.of(context);
+    final gstState = _newCompany && Validators.gstinError(_gstin.text) == null && _gstin.text.trim().isNotEmpty
         ? Validators.gstinState(_gstin.text)
         : null;
     return Scaffold(
@@ -293,46 +305,95 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    SegmentedButton<bool>(
-                      segments: const [
-                        ButtonSegment(value: true, label: Text('Company'), icon: Icon(Icons.apartment_outlined)),
-                        ButtonSegment(value: false, label: Text('Individual'), icon: Icon(Icons.person_outline)),
-                      ],
-                      selected: {_isCompany},
-                      showSelectedIcon: false,
-                      onSelectionChanged: (s) => setState(() => _isCompany = s.first),
+                    const FieldLabel('Company name', optional: true),
+                    RawAutocomplete<Customer>(
+                      textEditingController: _company,
+                      focusNode: _companyFocus,
+                      displayStringForOption: (c) => c.name,
+                      optionsBuilder: (v) => v.text.trim().length < 2 ? const <Customer>[] : app.companies(v.text),
+                      onSelected: (c) => setState(() => _parent = c),
+                      fieldViewBuilder: (context, controller, focus, onSubmit) => TextFormField(
+                        controller: controller,
+                        focusNode: focus,
+                        textCapitalization: TextCapitalization.words,
+                        textInputAction: TextInputAction.next,
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          hintText: 'Leave empty for an individual',
+                          suffixIcon: _companyText.isEmpty
+                              ? null
+                              : IconButton(
+                                  tooltip: 'Clear',
+                                  icon: const Icon(Icons.close),
+                                  onPressed: () => setState(() {
+                                    _company.clear();
+                                    _parent = null;
+                                  }),
+                                ),
+                        ),
+                      ),
+                      optionsViewBuilder: (context, onSelected, options) => Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 4,
+                          borderRadius: BorderRadius.circular(VV.radiusMd),
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight: 240,
+                              maxWidth: MediaQuery.sizeOf(context).width - 32,
+                            ),
+                            child: ListView(
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.fromLTRB(16, 10, 16, 4),
+                                  child: Text(
+                                    'Already in Odoo',
+                                    style: TextStyle(fontSize: 12, color: VV.inkMuted),
+                                  ),
+                                ),
+                                for (final c in options)
+                                  ListTile(
+                                    dense: true,
+                                    leading: CustomerAvatar(c, size: 32),
+                                    title: Text(c.name),
+                                    subtitle: c.city.isEmpty ? null : Text(c.city),
+                                    onTap: () => onSelected(c),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 20),
-                    FieldLabel(_isCompany ? 'Company name' : 'Full name', required: true),
+                    if (_companyText.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          _existingCompany
+                              ? 'Existing company. This person will be added as its contact.'
+                              : 'A new company will be created, with this person as its contact.',
+                          style: const TextStyle(fontSize: 12, color: VV.inkMuted),
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    const FieldLabel('Name', required: true),
                     TextFormField(
                       controller: _name,
                       textCapitalization: TextCapitalization.words,
                       textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(hintText: 'Customer / contact person name'),
                       validator: (v) => (v ?? '').trim().length < 2 ? 'Enter the name.' : null,
                     ),
-                    if (!_isCompany) ...[
-                      const SizedBox(height: 16),
-                      const FieldLabel('Works at (company)', optional: true),
-                      InkWell(
-                        onTap: _pickCompany,
-                        borderRadius: BorderRadius.circular(VV.radiusSm),
-                        child: InputDecorator(
-                          decoration: InputDecoration(
-                            suffixIcon: _parent == null
-                                ? const Icon(Icons.search)
-                                : IconButton(
-                                    tooltip: 'Remove company',
-                                    icon: const Icon(Icons.close),
-                                    onPressed: () => setState(() => _parent = null),
-                                  ),
-                          ),
-                          child: Text(
-                            _parent?.name ?? 'Choose an existing company',
-                            style: TextStyle(color: _parent == null ? VV.inkMuted : VV.ink, fontSize: 16),
-                          ),
-                        ),
-                      ),
-                    ],
+                    const SizedBox(height: 16),
+                    const FieldLabel('Tags', optional: true),
+                    TagPicker(
+                      tree: app.tagTree,
+                      selected: _tags,
+                      enabled: !_busy,
+                      onChanged: (t) => setState(() => _tags = t),
+                    ),
                     const SizedBox(height: 16),
                     const FieldLabel('Mobile', required: true),
                     TextFormField(
@@ -353,10 +414,10 @@ class _NewCustomerScreenState extends State<NewCustomerScreen> {
                       child: OutlinedButton.icon(
                         onPressed: _busy ? null : _addContact,
                         icon: const Icon(Icons.person_add_alt_1),
-                        label: Text(_contacts.isEmpty ? 'Add contact' : 'Add another contact'),
+                        label: Text(_contacts.isEmpty ? 'Add another contact person' : 'Add one more contact person'),
                       ),
                     ),
-                    if (_isCompany) ...[
+                    if (_newCompany) ...[
                       const SizedBox(height: 16),
                       const FieldLabel('GSTIN', optional: true),
                       TextFormField(
@@ -494,58 +555,6 @@ class _UpperCase extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) =>
       newValue.copyWith(text: newValue.text.toUpperCase());
-}
-
-class _CompanyPicker extends StatefulWidget {
-  const _CompanyPicker();
-
-  @override
-  State<_CompanyPicker> createState() => _CompanyPickerState();
-}
-
-class _CompanyPickerState extends State<_CompanyPicker> {
-  String _q = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final results = AppScope.of(context).companies(_q);
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-        child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * 0.7,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: TextField(
-                  autofocus: true,
-                  onChanged: (v) => setState(() => _q = v),
-                  decoration: const InputDecoration(hintText: 'Search company', prefixIcon: Icon(Icons.search)),
-                ),
-              ),
-              Expanded(
-                child: results.isEmpty
-                    ? const Center(
-                        child: Text('No company found', style: TextStyle(color: VV.inkMuted)),
-                      )
-                    : ListView.separated(
-                        itemCount: results.length,
-                        separatorBuilder: (_, _) => const Divider(),
-                        itemBuilder: (_, i) => ListTile(
-                          leading: CustomerAvatar(results[i], size: 36),
-                          title: Text(results[i].name),
-                          subtitle: Text(results[i].city),
-                          onTap: () => Navigator.pop(context, results[i]),
-                        ),
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// One extra contact person typed on the New customer page.

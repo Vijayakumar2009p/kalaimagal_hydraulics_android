@@ -20,7 +20,8 @@ class Customer {
     this.longitude = 0,
     this.locationDate = '',
     this.pending = false,
-  });
+    List<int>? tagIds,
+  }) : tagIds = tagIds ?? [];
 
   /// Odoo id. Negative while the customer exists only on the phone.
   int id;
@@ -48,6 +49,12 @@ class Customer {
   /// True while a change for this customer waits to be synced.
   bool pending;
 
+  /// Odoo contact tags (category_id).
+  List<int> tagIds;
+
+  /// Tag names for search (filled in by the app, not saved).
+  String tagText = '';
+
   bool get isLocal => id < 0;
   bool get hasLocation => latitude != 0 || longitude != 0;
 
@@ -63,13 +70,17 @@ class Customer {
     final parts = <String>[];
     if (!isCompany && parentName.isNotEmpty) parts.add(parentName);
     if (city.isNotEmpty) parts.add(city);
-    if (isCompany) parts.add(vat.isNotEmpty ? vat : 'No GSTIN');
+    if (tagText.isNotEmpty) {
+      parts.add(tagText);
+    } else if (isCompany) {
+      parts.add(vat.isNotEmpty ? vat : 'No GSTIN');
+    }
     if (parts.isEmpty && phone.isNotEmpty) parts.add(phone);
     return parts.join(' · ');
   }
 
   String get _searchText =>
-      [name, parentName, city, vat, phone.replaceAll(RegExp(r'\D'), ''), email].join(' ').toLowerCase();
+      [name, parentName, city, vat, phone.replaceAll(RegExp(r'\D'), ''), email, tagText].join(' ').toLowerCase();
 
   bool matches(String query) {
     final q = query.trim().toLowerCase();
@@ -106,6 +117,7 @@ class Customer {
       latitude: _num(r['partner_latitude']),
       longitude: _num(r['partner_longitude']),
       locationDate: _str(r['date_localization']),
+      tagIds: r['category_id'] is List ? (r['category_id'] as List).whereType<int>().toList() : [],
     );
   }
 
@@ -129,6 +141,7 @@ class Customer {
     'longitude': longitude,
     'locationDate': locationDate,
     'pending': pending,
+    'tagIds': tagIds,
   };
 
   factory Customer.fromJson(Map<String, dynamic> j) => Customer(
@@ -151,5 +164,6 @@ class Customer {
     longitude: _num(j['longitude']),
     locationDate: (j['locationDate'] ?? '') as String,
     pending: j['pending'] == true,
+    tagIds: ((j['tagIds'] ?? const []) as List).whereType<int>().toList(),
   );
 }

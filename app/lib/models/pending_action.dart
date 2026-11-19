@@ -6,6 +6,7 @@
 ///  * [PendingAction.photos]      - photos added to an existing customer
 ///  * [PendingAction.visitCreate] - a Field Visit scheduled on the phone
 ///  * [PendingAction.visitDone]   - a Field Visit marked done on site
+///  * [PendingAction.tags]        - contact tags changed on an existing customer
 class PendingAction {
   PendingAction({
     required this.ref,
@@ -25,6 +26,7 @@ class PendingAction {
   static const String photos = 'photos';
   static const String visitCreate = 'visitCreate';
   static const String visitDone = 'visitDone';
+  static const String tags = 'tags';
 
   /// Unique reference on this phone.
   final String ref;
@@ -52,6 +54,7 @@ class PendingAction {
     if (kind == photos) return 'Photos';
     if (kind == visitCreate) return 'Field visit planned';
     if (kind == visitDone) return 'Field visit done';
+    if (kind == tags) return 'Tags';
     return 'Location';
   }
 

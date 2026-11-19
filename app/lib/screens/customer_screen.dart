@@ -7,13 +7,14 @@ import '../models/pending_action.dart';
 import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
+import '../widgets/tag_picker.dart';
 import 'add_photos_screen.dart';
 import 'plan_visit_screen.dart';
 import 'visits_screen.dart';
 import 'set_location_screen.dart';
 
-/// Customer details. The app only sets the location here; other details
-/// are changed by the office in Odoo.
+/// Customer details. The app sets the location, photos and tags here; other
+/// details are changed by the office in Odoo.
 class CustomerScreen extends StatelessWidget {
   const CustomerScreen({super.key, required this.customer});
   final Customer customer;
@@ -76,6 +77,20 @@ class CustomerScreen extends StatelessWidget {
                       title: 'Not saved in Odoo',
                       icon: Icons.error_outline,
                     ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (!app.tagTree.isEmpty) ...[
+                    Row(
+                      children: [
+                        const Expanded(child: SectionLabel('Tags')),
+                        TextButton.icon(
+                          onPressed: () => showTagEditor(context, c),
+                          icon: const Icon(Icons.sell_outlined, size: 18),
+                          label: Text(c.tagIds.any(app.tagTree.managedIds.contains) ? 'Change' : 'Add tags'),
+                        ),
+                      ],
+                    ),
+                    TagChips(tree: app.tagTree, tagIds: c.tagIds),
                     const SizedBox(height: 16),
                   ],
                   InfoTable(
